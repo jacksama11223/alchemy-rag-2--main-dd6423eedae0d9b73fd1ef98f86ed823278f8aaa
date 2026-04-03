@@ -1,0 +1,9 @@
+{
+  "name": "alchemy real",
+  "description": "",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}
