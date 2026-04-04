@@ -602,7 +602,7 @@ function App() {
     marginRight: hasRightSplit ? '50%' : 0,
     marginTop: hasTopSplit ? '50vh' : 0,
     marginBottom: hasBottomSplit ? '50vh' : 0,
-    paddingLeft: (isLoggedIn && view !== 'landing' && view !== 'admin') ? (isSidebarOpen ? '16rem' : '4rem') : 0,
+    paddingLeft: 0,
     transition: 'all 0.3s ease-in-out',
   };
 
