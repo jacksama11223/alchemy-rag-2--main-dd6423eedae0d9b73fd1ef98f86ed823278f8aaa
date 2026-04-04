@@ -5,7 +5,7 @@ import { KnowledgeNode, AlchemySource, AlchemySettings, AlchemyIntent } from '..
 import { generateLearningContent, generateOntologyFromText, checkSemanticResonance, analyzeAlchemyHabits } from '../services/geminiService';
 import { useGamification } from '../contexts/GamificationContext';
 import { useBehavior } from '../contexts/BehaviorContext';
-import { publishItem, getCurrentUser, logAlchemyAction, createNode } from '../services/mockBackend'; 
+import { publishItem, getCurrentUser, logAlchemyAction, createNode, getAuthHeader } from '../services/mockBackend'; 
 import { GuideTrigger } from './GuideSystem'; 
 
 // Assets
@@ -15,6 +15,7 @@ import { OceanTheme } from '../theme/theme';
 // Module Imports
 import { UrlScraperInput, YoutubeTranscriber, OcrScanner, AudioRecorder, DriveImporter, DirectTextInput, FileUploader, ImageAnalyzerInput, NoteImporter } from './alchemy/AlchemyAdvancedInput';
 import { ImageStudio } from './alchemy/ImageStudio';
+import { RoadmapPreview } from './alchemy/RoadmapPreview';
 import { AlchemySettingsSidebar, AlchemyHistorySidebar } from './alchemy/AlchemySidebars';
 import { MethodSelector, ProcessingView, RefinementView, ResultView } from './alchemy/AlchemyStages';
 import { ZenModeToggle, KeyboardShortcutMapper, LocalStorageSyncIndicator } from './alchemy/AlchemySystemTools';
@@ -63,6 +64,7 @@ const SIDEBAR_MENU = [
             { id: 'ai_methods', label: 'Lò Luyện AI', icon: 'auto_awesome' },
             { id: 'image_studio', label: 'Image Studio', icon: 'image' },
             { id: 'deep_read', label: 'Đọc Sâu (Deep Read)', icon: 'menu_book' },
+            { id: 'roadmap_forge', label: 'Lộ Trình Học Tập AI', icon: 'map' },
             { id: 'manual', label: 'Tạo Thủ Công', icon: 'handyman' },
             { id: 'json_editor', label: 'Biên Tập JSON', icon: 'data_object' },
         ]
@@ -154,6 +156,11 @@ const Alchemy: React.FC<AlchemyProps> = ({
     const [showDocSelector, setShowDocSelector] = useState(false);
     const [assetToAttach, setAssetToAttach] = useState<IncomingAsset | null>(null);
     const [aiPromptDialog, setAiPromptDialog] = useState<{isOpen: boolean, methodId: string} | null>(null);
+    const [roadmapData, setRoadmapData] = useState<{ title: string, stages: any[] }>({ title: '', stages: [] });
+    const [isGeneratingRoadmap, setIsGeneratingRoadmap] = useState(false);
+    const [roadmapQuery, setRoadmapQuery] = useState("");
+    const [roadmapDifficulty, setRoadmapDifficulty] = useState("Medium");
+    const [roadmapStagesCount, setRoadmapStagesCount] = useState(3);
     const [promptQuery, setPromptQuery] = useState("");
     const [isFetchingRag, setIsFetchingRag] = useState(false);
     const [ragResultCount, setRagResultCount] = useState(0);
@@ -603,7 +610,84 @@ const Alchemy: React.FC<AlchemyProps> = ({
         }
     };
 
-    const reset = () => { setSources([]); setStep('input'); setActiveSidebarItem('url'); setTempNodeData(null); setGeneratedContentString(''); setResonanceMatches([]); setFinalNodeForPublish(null); setIsDeepReadMode(false); };
+    const handleGenerateRoadmap = async () => {
+        if (!roadmapQuery.trim()) {
+            alert("Vui lòng nhập chủ đề lộ trình!");
+            return;
+        }
+
+        setIsGeneratingRoadmap(true);
+        setStatusMessage("Đang thiết kế lộ trình học tập hệ thống...");
+        
+        try {
+            let token = localStorage.getItem('token');
+            if (!token) {
+                const sessionStr = localStorage.getItem('learnai_session');
+                if (sessionStr) {
+                    try { token = JSON.parse(sessionStr).token; } catch (_) {}
+                }
+            }
+            const customKey = localStorage.getItem('custom_gemini_api_key') || '';
+
+            const headers = getAuthHeader();
+
+            const res = await fetch('/api/roadmap/generate', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    topic: roadmapQuery,
+                    difficulty: roadmapDifficulty,
+                    stagesCount: roadmapStagesCount
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setStatusMessage("Chế tạo lộ trình thành công!");
+                setRoadmapData({
+                    title: data.roadmapTitle,
+                    stages: data.nodes.map((n: any) => ({
+                        id: n._id || n.id,
+                        title: n.title,
+                        summary: n.data.summary,
+                        concepts: n.tags.filter((t: string) => t !== 'Roadmap' && t !== data.roadmapTitle),
+                        flashcardCount: n.data.flashcards?.length || 0
+                    }))
+                });
+                
+                // Add all nodes to graph
+                if (onAddNodes) {
+                    onAddNodes(data.nodes);
+                } else {
+                    data.nodes.forEach((n: any) => onAddNode(n));
+                }
+                
+                addXP(500, "Kiến trúc sư tri thức");
+            } else {
+                const error = await res.json();
+                alert(`Lỗi: ${error.message}`);
+            }
+        } catch (e) {
+            console.error("Roadmap generation failed:", e);
+            alert("Đã có lỗi xảy ra khi tạo lộ trình.");
+        } finally {
+            setIsGeneratingRoadmap(false);
+        }
+    };
+
+    const reset = () => { 
+        setSources([]); 
+        setStep('input'); 
+        setActiveSidebarItem('url'); 
+        setTempNodeData(null); 
+        setGeneratedContentString(''); 
+        setResonanceMatches([]); 
+        setFinalNodeForPublish(null); 
+        setIsDeepReadMode(false); 
+        setRoadmapData({ title: '', stages: [] });
+        setIsGeneratingRoadmap(false);
+        setRoadmapQuery("");
+    };
 
     const activeDragItem = useDndActionStore(state => state.activeDragItem);
     const isDraggingFile = activeDragItem?.dataType === 'FILE_ASSET';
@@ -981,6 +1065,93 @@ const Alchemy: React.FC<AlchemyProps> = ({
                         )}
 
                         {activeSidebarItem === 'deep_read' && <ChunkingText content={sources[0]?.content || ''} onComplete={handleDeepReadComplete} />}
+                        
+                        {activeSidebarItem === 'roadmap_forge' && (
+                            <div className="max-w-4xl mx-auto w-full h-full flex flex-col gap-6">
+                                {roadmapData.stages.length === 0 ? (
+                                    <div className="bg-white/60 backdrop-blur-md rounded-3xl p-8 border border-white shadow-xl flex flex-col gap-6 animate-fadeIn">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-4 bg-sky-100 rounded-2xl text-sky-600 shadow-sm">
+                                                <span className="material-symbols-outlined text-4xl">architecture</span>
+                                            </div>
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-800 tracking-tight">AI Roadmap Forge</h2>
+                                                <p className="text-slate-500 font-medium">Tạo lộ trình học tập hệ thống dựa trên kho dữ liệu cá nhân.</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-black text-slate-700 uppercase tracking-wider">Chủ đề lộ trình</label>
+                                                <textarea 
+                                                    value={roadmapQuery}
+                                                    onChange={(e) => setRoadmapQuery(e.target.value)}
+                                                    placeholder="Ví dụ: 'Lập trình React nâng cao', 'Lịch sử triết học Hy Lạp'..."
+                                                    className="w-full h-32 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-sky-400 focus:bg-white outline-none transition-all text-sm font-medium resize-none shadow-inner"
+                                                />
+                                            </div>
+                                            
+                                            <div className="space-y-6">
+                                                <div className="space-y-3">
+                                                    <label className="block text-sm font-black text-slate-700 uppercase tracking-wider">Mức độ thử thách</label>
+                                                    <div className="flex gap-2">
+                                                        {['Easy', 'Medium', 'Hard'].map(d => (
+                                                            <button 
+                                                                key={d}
+                                                                onClick={() => setRoadmapDifficulty(d)}
+                                                                className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all ${roadmapDifficulty === d ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                                            >
+                                                                {d}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-end">
+                                                        <label className="block text-sm font-black text-slate-700 uppercase tracking-wider">Số giai đoạn (Levels)</label>
+                                                        <span className="text-lg font-black text-sky-600">{roadmapStagesCount}</span>
+                                                    </div>
+                                                    <input 
+                                                        type="range" min="2" max="6" step="1" 
+                                                        value={roadmapStagesCount}
+                                                        onChange={(e) => setRoadmapStagesCount(parseInt(e.target.value))}
+                                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500 hover:accent-sky-600 transition-all"
+                                                    />
+                                                </div>
+
+                                                <button 
+                                                    onClick={handleGenerateRoadmap}
+                                                    disabled={isGeneratingRoadmap || !roadmapQuery.trim()}
+                                                    className="w-full py-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-black rounded-2xl shadow-lg shadow-sky-100 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                                                >
+                                                    {isGeneratingRoadmap ? (
+                                                        <>
+                                                            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                                            Đang Phác Thảo Lộ Trình...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <span className="material-symbols-outlined">auto_awesome</span>
+                                                            Bắt Đầu Chế Tạo Hệ Thống
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <RoadmapPreview 
+                                        title={roadmapData.title}
+                                        stages={roadmapData.stages}
+                                        isGenerating={isGeneratingRoadmap}
+                                        onCommit={() => { onGoToGraph(); reset(); }}
+                                        onCancel={() => reset()}
+                                    />
+                                )}
+                            </div>
+                        )}
+
                         {activeSidebarItem === 'manual' && <ManualLessonCreator isOpen={true} onClose={() => setActiveSidebarItem('mixer')} sourceContent={sources.map(s => s.content).join('\n\n')} onSave={handleManualCreationSave} />}
                         {activeSidebarItem === 'json_editor' && <EditorAll isOpen={true} onClose={() => setActiveSidebarItem('mixer')} initialNode={editTargetNode} userNodes={userNodes} onUpdateNode={(node) => { if(onUpdateNode) onUpdateNode(node); }} />}
                         

@@ -204,6 +204,7 @@ app.use('/api/learning-paths', require('./routes/learningPathRoutes'));
 app.use('/api/rag', require('./routes/ragRoutes'));
 app.use('/api/global-knowledge', require('./routes/globalKnowledgeRoutes'));
 app.use('/api/user-memory', require('./routes/userMemoryRoutes'));
+app.use('/api/roadmap', require('./routes/roadmapRoutes'));
 
 app.get('/', (req, res) => {
   res.send('API is running...');

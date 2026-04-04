@@ -3,16 +3,19 @@ import { GuideInfo } from './GuideData';
 
 export const GuideTriggerIcon: React.FC<{ onClick: (e: React.MouseEvent) => void }> = ({ onClick }) => {
     return (
-        <button 
+        <div 
             onClick={onClick}
-            className="ml-2 flex items-center justify-center w-5 h-5 rounded-full bg-sky-100 border border-sky-300 text-sky-600 hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all group/guide relative shrink-0"
+            role="button"
+            tabIndex={0}
+            className="ml-2 flex items-center justify-center w-5 h-5 rounded-full bg-sky-100 border border-sky-300 text-sky-600 hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all group/guide relative shrink-0 cursor-pointer"
             title="Hướng dẫn sử dụng"
+            onKeyDown={(e) => e.key === 'Enter' && onClick(e as any)}
         >
             <span className="material-symbols-outlined text-[13px] animate-pulse drop-shadow-[0_0_3px_rgba(56,189,248,0.8)]">help</span>
             <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/guide:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 Mẹo dùng
             </span>
-        </button>
+        </div>
     );
 };
 
