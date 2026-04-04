@@ -8,10 +8,28 @@ const getNodes = async (req, res) => {
   try {
     const nodes = await Node.find({ user: req.user._id });
     // Map _id to id for frontend compatibility
+    const now = new Date();
+    const todayStart = new Date(now.setHours(0,0,0,0)).getTime();
+
+    // 1. Identify which nodes are strictly "Due"
+    const dueNodeIds = new Set();
+    nodes.forEach(node => {
+        if (!node.data) return;
+        const items = [...(node.data.flashcards || []), ...(node.data.quiz || []), ...(node.data.fillInBlanks || []), ...(node.data.spotErrors || []), ...(node.data.caseStudies || [])];
+        const hasDueItem = items.some(item => item?.sm2?.nextReviewDate && new Date(item.sm2.nextReviewDate).getTime() <= todayStart);
+        if (hasDueItem) dueNodeIds.add(node._id.toString());
+    });
+
+    // 2. Map and apply logic
     const mappedNodes = nodes.map(n => {
         const obj = n.toObject();
         obj.id = obj._id;
         delete obj._id;
+
+        if (obj.parentNodeId && dueNodeIds.has(obj.parentNodeId)) {
+            obj.isBlocked = true;
+        }
+
         return obj;
     });
     res.json(mappedNodes);
@@ -222,7 +240,8 @@ const syncNodes = async (req, res) => {
 const reviewNodeItem = async (req, res) => {
   try {
     const { itemType, itemIndex, quality } = req.body;
-    const node = await Node.findById(req.params.id);
+    const nodeId = req.params.id;
+    const node = await Node.findById(nodeId);
 
     if (!node) return res.status(404).json({ message: 'Node not found' });
     if (node.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
@@ -237,11 +256,41 @@ const reviewNodeItem = async (req, res) => {
     // Update the item safely
     node.data[itemType][itemIndex].sm2 = newSM2;
     node.markModified('data');
-
-    // Calculate aggregated mastery if needed
-    // node.mastery = ... 
-
     await node.save();
+
+    // --- KNOWLEDGE RIPPLE (G-Learning) ---
+    // If user forgot the concept (Again), ripple failure to descendants
+    if (quality < 3) {
+        const rippleToDescendants = async (parentId, depth = 0) => {
+            if (depth >= 2) return; // Limit depth for performance
+            const children = await Node.find({ parentNodeId: parentId.toString(), user: req.user._id });
+            for (const child of children) {
+                if (child.data) {
+                    let childModified = false;
+                    const types = ['flashcards', 'quiz', 'fillInBlanks', 'spotErrors', 'caseStudies'];
+                    types.forEach(type => {
+                        if (child.data[type] && Array.isArray(child.data[type])) {
+                            child.data[type].forEach(targetItem => {
+                                if (targetItem.sm2) {
+                                    // Heavy penalty: Reduce Ease Factor and set to due tomorrow
+                                    targetItem.sm2.efactor = Math.max(1.3, targetItem.sm2.efactor - 0.1);
+                                    targetItem.sm2.nextReviewDate = new Date(Date.now() + 86400000).toISOString();
+                                    childModified = true;
+                                }
+                            });
+                        }
+                    });
+                    if (childModified) {
+                        child.markModified('data');
+                        await child.save();
+                        await rippleToDescendants(child._id, depth + 1);
+                    }
+                }
+            }
+        };
+        rippleToDescendants(node._id).catch(e => console.error("Ripple failed", e));
+    }
+
     res.json({ success: true, sm2: newSM2 });
   } catch (error) {
     console.error('Error in reviewNodeItem:', error);
@@ -249,36 +298,43 @@ const reviewNodeItem = async (req, res) => {
   }
 };
 
-// @desc    Get nodes with due items
+// @desc    Get nodes with due items (Graph-Aware)
 // @route   GET /api/nodes/due
 const getDueNodes = async (req, res) => {
   try {
-    const nodes = await Node.find({ user: req.user._id });
+    const allNodes = await Node.find({ user: req.user._id });
     const now = new Date();
     const todayStart = new Date(now.setHours(0,0,0,0)).getTime();
 
-    const dueNodes = nodes.filter(node => {
+    // 1. Identify which nodes are strictly "Due"
+    const dueNodeIds = new Set();
+    allNodes.forEach(node => {
+        if (!node.data) return;
+        const items = [...(node.data.flashcards || []), ...(node.data.quiz || []), ...(node.data.fillInBlanks || []), ...(node.data.spotErrors || []), ...(node.data.caseStudies || [])];
+        const hasDueItem = items.some(item => item?.sm2?.nextReviewDate && new Date(item.sm2.nextReviewDate).getTime() <= todayStart);
+        if (hasDueItem) dueNodeIds.add(node._id.toString());
+    });
+
+    // 2. Map and apply "Blocked" logic
+    const mappedNodes = allNodes.filter(node => {
         if (!node.data) return false;
-        const allItems = [
-            ...(node.data.flashcards || []),
-            ...(node.data.quiz || []),
-            ...(node.data.fillInBlanks || []),
-            ...(node.data.spotErrors || []),
-            ...(node.data.caseStudies || [])
-        ];
-        
-        return allItems.some(item => {
-            if (!item || !item.sm2 || !item.sm2.nextReviewDate) return false;
-            return new Date(item.sm2.nextReviewDate).getTime() <= todayStart;
-        });
+        const items = [...(node.data.flashcards || []), ...(node.data.quiz || []), ...(node.data.fillInBlanks || []), ...(node.data.spotErrors || []), ...(node.data.caseStudies || [])];
+        return items.some(item => !item.sm2?.nextReviewDate || new Date(item.sm2.nextReviewDate).getTime() <= todayStart);
     }).map(n => {
         const obj = n.toObject();
         obj.id = obj._id;
         delete obj._id;
+
+        // --- PREREQUISITE LOCK CHECK ---
+        // A node is blocked if its parent is overdue
+        if (obj.parentNodeId && dueNodeIds.has(obj.parentNodeId)) {
+            obj.isBlocked = true;
+        }
+
         return obj;
     });
 
-    res.json(dueNodes);
+    res.json(mappedNodes);
   } catch (error) {
     console.error('Error in getDueNodes:', error);
     res.status(500).json({ message: 'Server error' });

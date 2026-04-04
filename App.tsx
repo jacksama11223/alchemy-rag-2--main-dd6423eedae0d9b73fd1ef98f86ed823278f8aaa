@@ -515,7 +515,19 @@ function App() {
   const handleExploreDifficulty = useCallback(() => { setView('explore-difficulty'); window.scrollTo({ top: 0, behavior: 'smooth' }); }, [setView]);
   const handleExploreSkill = useCallback(() => { setView('explore-skill'); window.scrollTo({ top: 0, behavior: 'smooth' }); }, [setView]);
   const handleNodeClick = (node: KnowledgeNode) => { setFocusedNodeId(node.id); logAction('click_element', 'Graph', `Selected node: ${node.title}`); };
-  const handleNodeOpen = (node: KnowledgeNode) => { if (view !== 'explore-graph' && view !== 'knowledge-graph') { setView('explore-graph'); } setActiveTagFilter(null); setFocusedNodeId(node.id); setLearningQueue([]); setCurrentPlaylistIndex(0); setSelectedNode(node); logAction('view_feature', 'Learning', `Opened learning session for: ${node.title}`); };
+  const handleNodeOpen = (node: KnowledgeNode) => { 
+      if (node.isBlocked) {
+          alert(`Khái niệm "${node.title}" đang bị khóa. Bạn cần hoàn thành việc ôn tập các khái niệm tiền đề (nhánh cha) trước khi mở khóa kiến thức nâng cao này.`);
+          return;
+      }
+      if (view !== 'explore-graph' && view !== 'knowledge-graph') { setView('explore-graph'); } 
+      setActiveTagFilter(null); 
+      setFocusedNodeId(node.id); 
+      setLearningQueue([]); 
+      setCurrentPlaylistIndex(0); 
+      setSelectedNode(node); 
+      logAction('view_feature', 'Learning', `Opened learning session for: ${node.title}`); 
+  };
   const handleDeepDive = (context: string) => { setTutorContext(context); setTutorContextNode(selectedNode); setSelectedNode(null); setView('tutor'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const handleStartPlaylist = (nodes: KnowledgeNode[]) => { if (nodes.length === 0) return; setLearningQueue(nodes); setCurrentPlaylistIndex(0); setSelectedNode(nodes[0]); logAction('view_feature', 'Playlist', `Started playlist with ${nodes.length} items`); };
   const handleNextNode = () => { addXP(20, "Hoàn tất đơn vị kiến thức"); if (currentPlaylistIndex < learningQueue.length - 1) { const nextIndex = currentPlaylistIndex + 1; setCurrentPlaylistIndex(nextIndex); setSelectedNode(learningQueue[nextIndex]); } else { setSelectedNode(null); setLearningQueue([]); addXP(50, "Hoàn tất Lộ trình Nghiên cứu"); logAction('complete_task', 'Playlist', 'Finished all items'); } };
@@ -737,7 +749,20 @@ function App() {
           </button>
       )}
 
-      {selectedNode && <LearningModal key={selectedNode.id} node={selectedNode} onClose={() => setSelectedNode(null)} onUpdateNode={handleUpdateNode} onDeepDive={handleDeepDive} playlistTotal={learningQueue.length > 0 ? learningQueue.length : undefined} playlistCurrent={learningQueue.length > 0 ? currentPlaylistIndex + 1 : undefined} onNextNode={learningQueue.length > 0 && currentPlaylistIndex < learningQueue.length - 1 ? handleNextNode : undefined} onEditInNoteLab={handleEditNodeInNoteLab} />}
+      {selectedNode && (
+        <LearningModal 
+          key={selectedNode.id} 
+          node={selectedNode} 
+          onClose={() => setSelectedNode(null)} 
+          onUpdateNode={handleUpdateNode} 
+          onDeepDive={handleDeepDive} 
+          playlistTotal={learningQueue.length > 0 ? learningQueue.length : undefined} 
+          playlistCurrent={learningQueue.length > 0 ? currentPlaylistIndex + 1 : undefined} 
+          onNextNode={learningQueue.length > 0 && currentPlaylistIndex < learningQueue.length - 1 ? handleNextNode : undefined} 
+          onEditInNoteLab={handleEditNodeInNoteLab} 
+          parentNodeTitle={userNodes.find(n => n.id === selectedNode.parentNodeId)?.title}
+        />
+      )}
 
       <main className="flex-grow flex flex-col relative z-0" style={mainStyle}>
         {view === 'landing' && <><Hero onStart={handleStart} /><Features /><Testimonials /><CallToAction onStart={handleStart} /></>}

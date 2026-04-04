@@ -6,9 +6,12 @@ interface GraphAlchemyFlashcardViewerProps {
     node: KnowledgeNode | null;
     isOpen: boolean;
     onClose: () => void;
+    parentNodeTitle?: string; // New prop for G-Learning breadcrumb
 }
 
-export const GraphAlchemyFlashcardViewer: React.FC<GraphAlchemyFlashcardViewerProps> = ({ node, isOpen, onClose }) => {
+export const GraphAlchemyFlashcardViewer: React.FC<GraphAlchemyFlashcardViewerProps> = ({ 
+    node, isOpen, onClose, parentNodeTitle 
+}) => {
     if (!isOpen) return null;
 
     let parsedCards = undefined;
@@ -46,6 +49,8 @@ export const GraphAlchemyFlashcardViewer: React.FC<GraphAlchemyFlashcardViewerPr
             isOpen={isOpen} 
             onClose={onClose}
             cards={parsedCards}
+            parentNodeTitle={parentNodeTitle}
+            nodeTitle={node?.title}
         />
     );
 };

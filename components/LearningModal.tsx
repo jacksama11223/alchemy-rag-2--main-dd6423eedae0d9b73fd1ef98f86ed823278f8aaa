@@ -14,7 +14,8 @@ interface LearningModalProps {
     playlistTotal?: number;
     playlistCurrent?: number;
     onNextNode?: () => void;
-    onEditInNoteLab?: (node: KnowledgeNode) => void; // New prop
+    onEditInNoteLab?: (node: KnowledgeNode) => void; 
+    parentNodeTitle?: string; // New prop for G-Learning breadcrumb
 }
 
 type SessionItemType = 'Flashcard' | 'Quiz' | 'Fill-in-the-blanks' | 'Spot the Error' | 'Case Study';
@@ -302,7 +303,10 @@ const OtherTypesView = React.memo(({ type, data, isRevealed, onReveal, onNext, o
 
 // --- MAIN COMPONENT ---
 
-const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNode, onDeepDive, playlistTotal, playlistCurrent, onNextNode, onEditInNoteLab }) => {
+export const LearningModal: React.FC<LearningModalProps> = ({ 
+    node, onClose, onUpdateNode, onDeepDive, playlistTotal, playlistCurrent, onNextNode, onEditInNoteLab,
+    parentNodeTitle 
+}) => {
     // --- GAMIFICATION & RANKED CONTEXT ---
     const { isRankedMode, updateRank } = useGamification();
 
@@ -549,99 +553,100 @@ const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNo
         );
     }
 
-    // Safety guard: if index is stale or queue is mismatched, don't crash
-    if (!currentSessionItem) return null;
-
-    const progressPercent = ((currentQueueIndex + 1) / sessionQueue.length) * 100;
+    const progressPercent = ((currentQueueIndex + 1) / (sessionQueue.length || 1)) * 100;
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-[fadeIn_0.3s_ease-out] font-display">
-            {/* RANKED MODE BADGE */}
-            {isRankedMode && (
-                <div className="absolute top-6 left-6 z-50 flex items-center gap-2 bg-yellow-900/30 border border-yellow-500/50 px-4 py-2 rounded-full animate-pulse shadow-[0_0_15px_rgba(234,179,8,0.3)]">
-                    <span className="material-symbols-outlined text-yellow-400">military_tech</span>
-                    <span className="text-yellow-200 font-bold text-sm tracking-wider uppercase">Ranked Match</span>
-                </div>
-            )}
-
-            <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
-                {onEditInNoteLab && (
-                    <button 
-                        onClick={() => onEditInNoteLab(node)}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600/80 hover:bg-purple-500 text-white rounded-full font-bold transition-all shadow-lg cursor-pointer backdrop-blur-sm border border-purple-400/30"
-                        title="Mở trong NoteLab để chỉnh sửa"
-                    >
-                        <span className="material-symbols-outlined text-lg">edit_note</span>
-                        <span className="hidden sm:inline">Biên tập Note</span>
-                    </button>
-                )}
-                <button 
-                    onClick={handleDeepDiveClick}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600/80 hover:bg-indigo-500 text-white rounded-full font-bold transition-all shadow-lg hover:shadow-indigo-500/40 cursor-pointer backdrop-blur-sm border border-indigo-400/30"
-                    title="Hỏi gia sư về nội dung này"
-                >
-                    <span className="material-symbols-outlined text-lg">psychology</span>
-                    <span className="hidden sm:inline">Hỏi Gia sư</span>
-                </button>
-                <button 
-                    onClick={onClose}
-                    className="text-white/60 hover:text-white transition-colors cursor-pointer"
-                >
-                    <span className="material-symbols-outlined text-4xl">close</span>
-                </button>
-            </div>
-
-            <div className="w-full max-w-5xl h-[90vh] flex flex-col">
-                {/* Header & Progress */}
-                <div className="mb-4 shrink-0">
-                    {playlistTotal && playlistTotal > 1 && (
-                        <div className="text-center mb-1">
-                            <span className="text-xs font-bold text-sky-400 uppercase tracking-widest bg-sky-900/30 px-3 py-1 rounded-full border border-sky-500/30">
-                                Playlist: Bài {playlistCurrent} / {playlistTotal}
-                            </span>
+        <div className={`fixed inset-0 z-[150] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 md:p-8 animate-fade-in font-display pointer-events-auto ${isShake ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
+            {/* Header / Context Bar */}
+            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
+                <div className="flex flex-col gap-1 pointer-events-auto">
+                    {/* G-Learning Breadcrumb */}
+                    {parentNodeTitle && (
+                        <div className="flex items-center gap-2 text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">
+                            <span className="material-symbols-outlined text-[14px]">psychology</span>
+                            <span>{parentNodeTitle}</span>
+                            <span className="material-symbols-outlined text-[10px]">chevron_right</span>
                         </div>
                     )}
-                    <h2 className="text-xl md:text-2xl font-bold text-white text-center mb-2 truncate px-8">{node.title}</h2>
-                    
-                    {/* Author Attribution */}
-                    {node.originalAuthor && (
-                        <p className="text-center text-xs text-amber-400 font-bold mb-3 italic">
-                            Tác giả: {node.originalAuthor}
-                        </p>
-                    )}
-
-                    <div className="flex items-center justify-center gap-4 text-sm text-slate-400 mb-4">
-                        <span className="px-3 py-1 rounded-full bg-white/10 border border-white/10">{currentSessionItem.type}</span>
-                        <span>{currentQueueIndex + 1} / {sessionQueue.length} câu</span>
-                        {/* AI Grading Toggle for Flashcards */}
-                        {currentSessionItem.type === 'Flashcard' && (
-                            <button 
-                                onClick={() => setIsAIGradingMode(!isAIGradingMode)}
-                                className={`px-3 py-1 rounded-full border text-xs font-bold transition-all ${isAIGradingMode ? 'bg-purple-600 border-purple-400 text-white' : 'bg-transparent border-slate-500 text-slate-400'}`}
-                            >
-                                {isAIGradingMode ? "AI Chấm Điểm: ON" : "AI Chấm Điểm: OFF"}
-                            </button>
+                    <div className="flex items-center gap-4 text-white">
+                        <span className="text-xl md:text-2xl font-black tracking-tight truncate max-w-[250px] md:max-w-md">{node.title}</span>
+                        {node.originalAuthor && (
+                            <span className="text-[10px] text-amber-500/80 font-bold italic bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                                BY {node.originalAuthor.toUpperCase()}
+                            </span>
                         )}
                     </div>
+                </div>
+
+                <div className="flex items-center gap-3 pointer-events-auto">
+                    {isRankedMode && (
+                        <div className="hidden sm:flex px-4 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-full items-center gap-2 shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+                            <span className="material-symbols-outlined text-yellow-500 text-sm">military_tech</span>
+                            <span className="text-yellow-500 font-bold text-xs uppercase tracking-widest">Ranked</span>
+                        </div>
+                    )}
                     
+                    {onEditInNoteLab && (
+                        <button 
+                            onClick={() => onEditInNoteLab(node)}
+                            className="p-2 bg-purple-600/20 hover:bg-purple-600 border border-purple-500/30 text-purple-300 hover:text-white rounded-full transition-all"
+                            title="Chỉnh sửa Note"
+                        >
+                            <span className="material-symbols-outlined">edit_note</span>
+                        </button>
+                    )}
+
+                    <button 
+                        onClick={handleDeepDiveClick}
+                        className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/30 text-indigo-300 hover:text-white rounded-full transition-all"
+                        title="Hỏi Gia sư AI"
+                    >
+                        <span className="material-symbols-outlined">psychology</span>
+                    </button>
+
+                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-all transform hover:rotate-90">
+                        <span className="material-symbols-outlined text-2xl md:text-3xl">close</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="w-full max-w-5xl flex flex-col items-center mt-12">
+                {/* Progress Indicators */}
+                <div className="w-full mb-8 space-y-3">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 px-2">
+                        <span>Chế độ: {currentSessionItem.type}</span>
+                        <span>{currentQueueIndex + 1} / {sessionQueue.length} câu</span>
+                    </div>
                     {/* RPG Experience Bar */}
-                    <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-white/10 shadow-inner relative">
+                    <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-white/5 shadow-inner relative">
                         <div 
-                            className="h-full bg-gradient-to-r from-sky-500 via-blue-500 to-purple-500 transition-all duration-300 ease-out relative" 
+                            className="h-full bg-gradient-to-r from-sky-500 via-blue-500 to-purple-500 transition-all duration-700 ease-out relative" 
                             style={{ width: `${progressPercent}%` }}
                         >
-                             <div className="absolute inset-0 bg-white/30 animate-[shimmer_1s_infinite]"></div>
+                             <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite]"></div>
                         </div>
                     </div>
                 </div>
 
-                <div className={`flex-grow relative bg-slate-900/50 rounded-3xl border flex flex-col p-4 md:p-8 shadow-2xl transition-colors overflow-hidden ${isRankedMode ? 'border-yellow-500/30 shadow-yellow-500/10' : 'border-white/10'}`}>
+                {/* Card Viewer Frame */}
+                <div className={`w-full relative bg-slate-900/40 backdrop-blur-sm rounded-[2.5rem] border flex flex-col p-4 md:p-10 shadow-3xl transition-all ${isRankedMode ? 'border-yellow-500/20 shadow-[0_20px_60px_rgba(234,179,8,0.1)]' : 'border-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.5)]'}`}>
                     
-                    {/* Scrollable Content Container */}
-                    <div className="w-full h-full overflow-y-auto custom-scrollbar pr-2 flex flex-col">
+                    {/* Toggle AI Grading for Flashcards */}
+                    {currentSessionItem.type === 'Flashcard' && (
+                        <div className="absolute top-6 right-10 z-20">
+                            <button 
+                                onClick={() => setIsAIGradingMode(!isAIGradingMode)}
+                                className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider transition-all ${isAIGradingMode ? 'bg-purple-600/20 border-purple-500 text-purple-300' : 'bg-black/20 border-slate-700 text-slate-500 hover:border-slate-500'}`}
+                            >
+                                <span className="material-symbols-outlined text-[12px]">{isAIGradingMode ? 'bolt' : 'smart_toy'}</span>
+                                {isAIGradingMode ? "AI GRADING: ON" : "AI GRADING: OFF"}
+                            </button>
+                        </div>
+                    )}
 
-                        {/* RENDER CONTENT BASED ON TYPE */}
-                        
+                    {/* Content Component Rendering */}
+                    <div className="w-full h-full min-h-[400px] flex flex-col">
                         {currentSessionItem.type === 'Flashcard' && (
                             <FlashcardView 
                                 data={currentSessionItem.data}
@@ -680,7 +685,6 @@ const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNo
                             />
                         )}
 
-                        {/* OTHER TYPES (Fill/Spot/Case) */}
                         {['Fill-in-the-blanks', 'Spot the Error', 'Case Study'].includes(currentSessionItem.type) && (
                             <OtherTypesView 
                                 type={currentSessionItem.type}
@@ -692,11 +696,10 @@ const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNo
                                 getIntervalLabel={getIntervalLabel}
                             />
                         )}
-
                     </div>
-
                 </div>
             </div>
+
             <style>{`
                 .preserve-3d { transform-style: preserve-3d; }
                 .backface-hidden { backface-visibility: hidden; }
@@ -706,6 +709,10 @@ const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNo
                     0%, 100% { transform: translateX(0); }
                     10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
                     20%, 40%, 60%, 80% { transform: translateX(5px); }
+                }
+                @keyframes shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
                 }
             `}</style>
         </div>

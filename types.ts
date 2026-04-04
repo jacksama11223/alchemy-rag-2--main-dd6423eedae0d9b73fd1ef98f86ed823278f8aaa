@@ -71,6 +71,7 @@ export interface KnowledgeNode {
     originalAuthor?: string;
     
     // UI Helpers
+    isBlocked?: boolean;
     _sortScore?: number;
     _daysUntilDue?: number;
     _weaknessAnalysis?: any;

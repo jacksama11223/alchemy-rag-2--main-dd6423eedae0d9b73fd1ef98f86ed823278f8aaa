@@ -17,9 +17,13 @@ interface FlashcardModeViewProps {
     isOpen: boolean;
     onClose: () => void;
     cards?: { front: string; back: string }[];
+    parentNodeTitle?: string; // New prop for G-Learning breadcrumb
+    nodeTitle?: string;       // New prop for context
 }
 
-export const FlashcardModeView: React.FC<FlashcardModeViewProps> = ({ isOpen, onClose, cards: propCards }) => {
+export const FlashcardModeView: React.FC<FlashcardModeViewProps> = ({ 
+    isOpen, onClose, cards: propCards, parentNodeTitle, nodeTitle 
+}) => {
     const [isFlipped, setIsFlipped] = useState(false);
     const [currentCard, setCurrentCard] = useState(0);
     const [userQuestion, setUserQuestion] = useState("");
@@ -125,13 +129,28 @@ export const FlashcardModeView: React.FC<FlashcardModeViewProps> = ({ isOpen, on
     return (
         <div className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8 animate-fade-in font-display pointer-events-auto">
             {/* Header */}
-            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-center">
-                <div className="flex items-center gap-4 text-white/50">
-                    <span className="text-sm font-bold uppercase tracking-widest">Phiên Ôn Tập</span>
-                    <div className="h-1 w-32 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${((currentCard + 1) / cards.length) * 100}%` }}></div>
+            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start">
+                <div className="flex flex-col gap-1">
+                    {/* G-Learning Breadcrumb */}
+                    {(parentNodeTitle || nodeTitle) && (
+                        <div className="flex items-center gap-2 text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">
+                            <span className="material-symbols-outlined text-[14px]">psychology</span>
+                            {parentNodeTitle && (
+                                <>
+                                    <span>{parentNodeTitle}</span>
+                                    <span className="material-symbols-outlined text-[10px]">chevron_right</span>
+                                </>
+                            )}
+                            <span className="text-white/60">{nodeTitle || 'Khám phá'}</span>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-4 text-white/50">
+                        <span className="text-xs font-bold uppercase tracking-widest">Phiên Ôn Tập</span>
+                        <div className="h-1 w-32 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${((currentCard + 1) / cards.length) * 100}%` }}></div>
+                        </div>
+                        <span className="font-mono text-xs">{safeIndex + 1} / {cards.length}</span>
                     </div>
-                    <span className="font-mono text-xs">{safeIndex + 1} / {cards.length}</span>
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-white transition-colors">
                     <span className="material-symbols-outlined text-3xl">close</span>

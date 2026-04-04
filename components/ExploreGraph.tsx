@@ -967,22 +967,40 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                 if (node.shape === 'square') ctx.rect(node.x - radius, node.y - radius, radius * 2, radius * 2);
                 else ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
                 
-                ctx.fillStyle = node.color;
+                // --- G-LEARNING: BLOCKED NODE VISUALS ---
+                const isBlocked = node.isBlocked;
+                
+                if (isBlocked) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = '#334155'; // Slate-700
+                } else {
+                    ctx.fillStyle = node.color;
+                }
                 
                 if (tK > 0.5 || isSelected) {
                     ctx.shadowBlur = isSelected ? 20 : 10;
-                    ctx.shadowColor = node.color;
+                    ctx.shadowColor = isBlocked ? '#ef4444' : node.color;
                 } else {
                     ctx.shadowBlur = 0;
                 }
                 
                 ctx.fill();
                 ctx.shadowBlur = 0; 
+                ctx.globalAlpha = 1;
 
                 if (isSelected || isHovered) {
-                    ctx.strokeStyle = '#fff';
+                    ctx.strokeStyle = isBlocked ? '#f87171' : '#fff';
                     ctx.lineWidth = 3 / tK;
                     ctx.stroke();
+                }
+
+                // Draw Lock Icon for Blocked Nodes
+                if (isBlocked) {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = `bold ${radius/tK}px "Material Symbols Outlined"`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('lock', node.x, node.y);
                 }
 
                 if (tK > 0.6 || isSelected || isHovered) {
@@ -990,13 +1008,13 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                     const metrics = ctx.measureText(node.title);
                     const labelY = node.y + radius + (20/tK);
                     
-                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillStyle = isBlocked ? 'rgba(127,29,29,0.7)' : 'rgba(0,0,0,0.7)';
                     ctx.beginPath();
                     const pad = 4/tK;
                     ctx.rect(node.x - metrics.width/2 - pad, labelY - 10/tK - pad, metrics.width + pad*2, 20/tK);
                     ctx.fill();
 
-                    ctx.fillStyle = '#fff';
+                    ctx.fillStyle = isBlocked ? '#fca5a5' : '#fff';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(node.title, node.x, labelY);
@@ -1786,7 +1804,12 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                 <KeyboardShortcutsModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
                 <UnifiedControlPanel isOpen={showControlPanel} onClose={() => setShowControlPanel(false)} activeTab={activePanelTab} onTabChange={setActivePanelTab} userNodes={userNodes} />
                 <QuestLog isOpen={showQuestLog} onClose={() => setShowQuestLog(false)} quests={quests} onClaimReward={onClaimReward} />
-                <GraphAlchemyFlashcardViewer isOpen={showFlashcardMode} onClose={() => { setShowFlashcardMode(false); setActiveFlashcardNode(null); }} node={activeFlashcardNode} />
+                <GraphAlchemyFlashcardViewer 
+                    isOpen={showFlashcardMode} 
+                    onClose={() => { setShowFlashcardMode(false); setActiveFlashcardNode(null); }} 
+                    node={activeFlashcardNode} 
+                    parentNodeTitle={userNodes.find(n => n.id === activeFlashcardNode?.parentNodeId)?.title}
+                />
                 <QuizGeneratorPanel isOpen={showQuizGen} onClose={() => setShowQuizGen(false)} />
                 <ZoneActionModal isOpen={showZoneActionModal} onClose={() => setShowZoneActionModal(false)} nodeCount={zoneSelectedNodes.length} onAction={handleZoneAction} />
 
