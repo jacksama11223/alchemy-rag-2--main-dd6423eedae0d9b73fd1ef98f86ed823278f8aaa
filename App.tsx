@@ -54,6 +54,7 @@ import OnboardingTour from './components/OnboardingTour';
 import { Sidebar } from './components/Sidebar';
 import { CommandPalette } from './components/CommandPalette';
 import { useLayoutStore } from './store/useLayoutStore';
+import usePushNotifications from './src/hooks/usePushNotifications';
 
 import { KnowledgeNode, SavedDrawing, AlchemyIntent, Quest, TodoTask, UserAccount, AdminUserFlow } from './types';
 import { getGlobalStats } from './services/sm2Service';
@@ -102,6 +103,9 @@ function App() {
   } = useAppStore();
 
   const { isSidebarOpen } = useLayoutStore();
+
+  const user = getCurrentUser();
+  usePushNotifications(user);
 
   const hasLoadedNodes = React.useRef(false);
   

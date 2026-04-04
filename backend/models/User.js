@@ -57,7 +57,12 @@ const userSchema = mongoose.Schema({
     strengths: [{ type: String }],
     weaknesses: [{ type: String }],
     suggestion: { type: String }
-  }
+  },
+  pushTokens: [{
+    token: { type: String, required: true },
+    platform: { type: String, enum: ['web', 'ios', 'android', 'expo'], required: true },
+    createdAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true,
 });

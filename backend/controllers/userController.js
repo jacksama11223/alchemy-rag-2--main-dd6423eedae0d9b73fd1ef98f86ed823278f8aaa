@@ -11,6 +11,7 @@ const otpGenerator = require('otp-generator');
 const sendEmail = require('../utils/sendEmail');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
+const { sendPushNotification } = require('../utils/pushNotifications');
 
 // Initialize Firebase Admin for token verification
 if (!admin.apps.length) {
@@ -422,6 +423,14 @@ const sendFriendRequest = async (req, res) => {
     });
 
     await targetUser.save();
+
+    // Send Push Notification
+    await sendPushNotification(targetUser, {
+        title: 'Lời mời kết bạn mới',
+        body: `${sender.name} muốn kết bạn với bạn!`,
+        data: { type: 'friend_request', from: sender._id.toString() }
+    });
+
     res.json({ message: `Đã gửi lời mời đến ${targetUser.name}` });
   } catch (error) {
     console.error('Error in sendFriendRequest:', error);
@@ -459,6 +468,13 @@ const respondFriendRequest = async (req, res) => {
                 from: user._id
             });
             await sender.save();
+            
+            // Send Push Notification to sender
+            await sendPushNotification(sender, {
+                title: 'Lời mời kết bạn đã được chấp nhận',
+                body: `${user.name} đã chấp nhận lời mời kết bạn của bạn!`,
+                data: { type: 'friend_accept', from: user._id.toString() }
+            });
         }
     }
 
@@ -662,8 +678,36 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// @desc    Save push token
+// @route   POST /api/users/push-token
+const savePushToken = async (req, res) => {
+  try {
+    const { token, platform } = req.body;
+    if (!token || !platform) {
+      return res.status(400).json({ message: 'Token and platform are required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if token already exists
+    const tokenExists = user.pushTokens.find(t => t.token === token);
+    if (!tokenExists) {
+      user.pushTokens.push({ token, platform });
+      await user.save();
+    }
+
+    res.status(200).json({ message: 'Push token saved successfully' });
+  } catch (error) {
+    console.error('Error in savePushToken:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = { 
     authUser, sendOTP, verifyOTPAndRegister, getUserProfile, updateUserProfile, getUsers, getLeaderboard, dailyCheckIn,
     sendFriendRequest, respondFriendRequest, getNotifications, markNotificationRead, getUserFriends, updateUserStatus,
-    updateUserPersona, socialLogin, requestPasswordReset, resetPassword
+    updateUserPersona, socialLogin, requestPasswordReset, resetPassword, savePushToken
 };

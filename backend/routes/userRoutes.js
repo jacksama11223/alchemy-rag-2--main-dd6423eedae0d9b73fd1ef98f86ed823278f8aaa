@@ -4,7 +4,7 @@ const router = express.Router();
 const { 
     authUser, sendOTP, verifyOTPAndRegister, getUserProfile, updateUserProfile, getUsers, getLeaderboard, dailyCheckIn,
     sendFriendRequest, respondFriendRequest, getNotifications, markNotificationRead, getUserFriends, updateUserStatus,
-    updateUserPersona, socialLogin, requestPasswordReset, resetPassword
+    updateUserPersona, socialLogin, requestPasswordReset, resetPassword, savePushToken
 } = require('../controllers/userController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -14,6 +14,7 @@ router.post('/login', authUser);
 router.post('/social', socialLogin);
 router.post('/request-reset-password', requestPasswordReset);
 router.post('/reset-password', resetPassword);
+router.post('/push-token', protect, savePushToken);
 router.route('/profile')
     .get(protect, getUserProfile)
     .put(protect, updateUserProfile); // Update profile
