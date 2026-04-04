@@ -6,13 +6,17 @@ const connectDB = require('./config/db');
 const http = require('http');
 const { Server } = require('socket.io');
 const { PeerServer } = require('peer');
+const { initSRNotificationJob } = require('./utils/srNotificationJob');
 
 // Load env vars
 dotenv.config();
 console.log('JWT_SECRET loaded:', process.env.JWT_SECRET ? 'Yes' : 'No');
 
 // Connect Database
-connectDB();
+connectDB().then(() => {
+    // Initialize Spaced Repetition Notification Job
+    initSRNotificationJob();
+});
 
 const app = express();
 

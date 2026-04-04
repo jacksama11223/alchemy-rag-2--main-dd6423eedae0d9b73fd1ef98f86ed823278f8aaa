@@ -566,6 +566,26 @@ export const deleteNodeInBackend = async (id: string): Promise<boolean> => {
     return false;
 };
 
+export const getDueNodesFromBackend = async (): Promise<KnowledgeNode[]> => {
+    try {
+        const response = await fetch(`${API_URL}/nodes/due`, { headers: getAuthHeader() });
+        if (response.ok) return await response.json();
+    } catch (e) { console.error("Fetch due nodes failed", e); }
+    return [];
+};
+
+export const reviewNodeItemInBackend = async (nodeId: string, itemType: string, itemIndex: number, quality: number): Promise<any> => {
+    try {
+        const response = await fetch(`${API_URL}/nodes/${nodeId}/review`, {
+            method: 'POST',
+            headers: getAuthHeader(),
+            body: JSON.stringify({ itemType, itemIndex, quality })
+        });
+        if (response.ok) return await response.json();
+    } catch (e) { console.error("Review item failed", e); }
+    return null;
+};
+
 export const saveChatSession = async (session: SavedChatSession): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}/chat`, {

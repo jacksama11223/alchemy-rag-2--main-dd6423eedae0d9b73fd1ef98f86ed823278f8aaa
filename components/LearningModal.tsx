@@ -4,6 +4,7 @@ import { KnowledgeNode } from '../types';
 import { calculateItemSM2, getPredictedInterval } from '../services/sm2Service';
 import { gradeUserAnswer } from '../services/geminiService';
 import { useGamification } from '../contexts/GamificationContext';
+import { reviewNodeItemInBackend } from '../services/mockBackend';
 
 interface LearningModalProps {
     node: KnowledgeNode;
@@ -364,27 +365,36 @@ const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNo
     // --- ACTIONS (Wrapped in useCallback) ---
 
     // Generic Update Function
-    const updateItemSM2 = useCallback((type: SessionItemType, index: number, quality: number) => {
-        if (!node.data || !onUpdateNode) return;
+    const updateItemSM2 = useCallback(async (type: SessionItemType, index: number, quality: number) => {
+        if (!node.data) return;
 
-        const newData = { ...node.data };
-        
-        const updateArray = (arrKey: keyof typeof newData) => {
-            const arr = newData[arrKey] as any[];
-            if (!arr) return;
-            const item = arr[index];
-            const newSM2 = calculateItemSM2(item.sm2, quality);
-            newData[arrKey] = arr.map((x, i) => i === index ? { ...x, sm2: newSM2 } : x);
-        };
+        // Map UI type back to data keys
+        let itemTypeKey = '';
+        if (type === 'Flashcard') itemTypeKey = 'flashcards';
+        else if (type === 'Quiz') itemTypeKey = 'quiz';
+        else if (type === 'Fill-in-the-blanks') itemTypeKey = 'fillInBlanks';
+        else if (type === 'Spot the Error') itemTypeKey = 'spotErrors';
+        else if (type === 'Case Study') itemTypeKey = 'caseStudies';
 
-        if (type === 'Flashcard') updateArray('flashcards');
-        else if (type === 'Quiz') updateArray('quiz');
-        else if (type === 'Fill-in-the-blanks') updateArray('fillInBlanks');
-        else if (type === 'Spot the Error') updateArray('spotErrors');
-        else if (type === 'Case Study') updateArray('caseStudies');
-
-        const updatedNode = { ...node, data: newData };
-        onUpdateNode(updatedNode);
+        if (itemTypeKey) {
+            // Update on Backend
+            await reviewNodeItemInBackend(node.id, itemTypeKey, index, quality);
+            
+            // Note: Since we are using a linear queue and about to move next, 
+            // we don't necessarily NEED to update the local node object immediately 
+            // if we are going to close the modal and re-render the graph soon.
+            // But let's update locally too to ensure session integrity if they re-visit.
+            if (onUpdateNode) {
+                const newData = { ...node.data };
+                const arr = newData[itemTypeKey as keyof typeof newData] as any[];
+                if (arr) {
+                    const item = arr[index];
+                    const newSM2 = calculateItemSM2(item.sm2, quality);
+                    newData[itemTypeKey as keyof typeof newData] = arr.map((x, i) => i === index ? { ...x, sm2: newSM2 } : x) as any;
+                    onUpdateNode({ ...node, data: newData });
+                }
+            }
+        }
 
         // --- RANKED MODE LOGIC ---
         if (isRankedMode) {
@@ -392,7 +402,6 @@ const LearningModal: React.FC<LearningModalProps> = ({ node, onClose, onUpdateNo
             // Scoring System
             if (quality >= 4) points = 20; 
             else points = -15; 
-
             updateRank(points);
         }
 

@@ -6,7 +6,9 @@ import { calculateNodeMastery } from '../services/sm2Service';
 import { useGamification } from '../contexts/GamificationContext';
 import { GuideTrigger } from './GuideSystem';
 import { generateAdaptiveSkillTree } from '../services/geminiService';
-import { saveUserNodes, getClustersFromBackend, createClusterInBackend, updateClusterInBackend, deleteClusterFromBackend } from '../services/mockBackend';
+import { saveUserNodes, getClustersFromBackend, createClusterInBackend, updateClusterInBackend, deleteClusterFromBackend, getDueNodesFromBackend } from '../services/mockBackend';
+import { DueCardSidebar } from './Graph/DueCardSidebar';
+import { LearningHubSidebar } from './Graph/LearningHubSidebar';
 
 // Layout & UI
 import { GraphShell, ContextToolbar, ContextButton } from './GraphUI';
@@ -411,6 +413,9 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const [showExport, setShowExport] = useState(false);
     const [showTemplates, setShowTemplates] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
+    const [dueNodes, setDueNodes] = useState<KnowledgeNode[]>([]);
+    const [isDueSidebarOpen, setIsDueSidebarOpen] = useState(false);
+    const [isLearningHubOpen, setIsLearningHubOpen] = useState(false);
 
     const { isRankedMode, toggleRankedMode } = useGamification();
 
@@ -420,7 +425,12 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
             const data = await getClustersFromBackend();
             setUserClusters(data);
         };
+        const loadDueNodes = async () => {
+            const data = await getDueNodesFromBackend();
+            setDueNodes(data);
+        };
         loadClusters();
+        loadDueNodes();
     }, []);
 
     useEffect(() => {
@@ -991,6 +1001,32 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                     ctx.textBaseline = 'middle';
                     ctx.fillText(node.title, node.x, labelY);
                 }
+
+                // 4.1. DRAW DUE BADGE/GLOW
+                const isDue = dueNodes.some(dn => dn.id === node.id);
+                if (isDue) {
+                    ctx.save();
+                    // Pulse effect
+                    const pulse = Math.sin(time * 5) * 5 + 10;
+                    ctx.shadowBlur = pulse;
+                    ctx.shadowColor = '#facc15'; // Yellow/Gold glow
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 3 / tK;
+                    ctx.beginPath();
+                    if (node.shape === 'square') ctx.rect(node.x - radius - 2, node.y - radius - 2, radius * 2 + 4, radius * 2 + 4);
+                    else ctx.arc(node.x, node.y, radius + 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // Small indicator badge
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath();
+                    ctx.arc(node.x + radius, node.y - radius, 8/tK, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.font = `bold ${10/tK}px "Lexend"`;
+                    ctx.fillText('!', node.x + radius, node.y - radius);
+                }
             });
 
             // 5. DRAW LINKING PATH (Active Drag)
@@ -1516,6 +1552,65 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                     onAccept={handleAcceptSignal} 
                     onDiscard={() => onClearIntent && onClearIntent()} 
                 />
+            )}
+
+            {/* DUE CARD SIDEBAR (RIGHT) */}
+            <DueCardSidebar 
+                isOpen={isDueSidebarOpen}
+                onClose={() => setIsDueSidebarOpen(false)}
+                allNodes={nodesRef.current} // Pass all nodes
+                onNodeClick={(node) => {
+                    handleFocusNode(node.id);
+                    setIsDueSidebarOpen(false);
+                }}
+                onStartReview={(node) => {
+                    if (onOpenNode) onOpenNode(node);
+                    setIsDueSidebarOpen(false);
+                }}
+            />
+
+            {/* LEARNING HUB SIDEBAR (LEFT) */}
+            <LearningHubSidebar 
+                isOpen={isLearningHubOpen}
+                onClose={() => setIsLearningHubOpen(false)}
+                nodes={nodesRef.current}
+                onStartGlobalReview={() => {
+                     // Find first due node
+                     const dueNode = nodesRef.current.find(n => {
+                        const items = [...(n.data?.flashcards || []), ...(n.data?.quiz || [])];
+                        return items.some(i => !i.sm2?.nextReviewDate || new Date(i.sm2.nextReviewDate) <= new Date());
+                     });
+                     if (dueNode && onOpenNode) onOpenNode(dueNode);
+                     setIsLearningHubOpen(false);
+                }}
+            />
+
+            {/* FLOATING ACTION BUTTONS */}
+            {/* RIGHT: Knowledge Vault */}
+            {!isDueSidebarOpen && (
+                <button 
+                    onClick={() => setIsDueSidebarOpen(true)}
+                    className="fixed bottom-24 right-8 z-[60] bg-cyan-600 hover:bg-cyan-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(6,182,212,0.5)] flex items-center gap-2 group transition-all"
+                >
+                    <span className="material-symbols-outlined font-bold">inventory_2</span>
+                    <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm">
+                        Thẻ tri thức
+                    </span>
+                    {dueNodes.length > 0 && <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full border-2 border-slate-900 animate-pulse"></div>}
+                </button>
+            )}
+
+            {/* LEFT: Learning Hub Trigger */}
+            {!isLearningHubOpen && (
+                 <button 
+                    onClick={() => setIsLearningHubOpen(true)}
+                    className="fixed bottom-24 left-8 z-[60] bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 text-white p-4 rounded-full flex items-center gap-2 group transition-all"
+                >
+                    <span className="material-symbols-outlined font-bold text-cyan-400">psychology</span>
+                    <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm">
+                        Trung tâm học tập
+                    </span>
+                </button>
             )}
             
             {showExpandModal && expandingNode && (

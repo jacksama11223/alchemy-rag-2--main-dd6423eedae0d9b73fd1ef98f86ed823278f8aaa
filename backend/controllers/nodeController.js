@@ -1,5 +1,6 @@
 const Node = require('../models/Node');
 const { syncToRag } = require('../utils/ragSync');
+const { calculateSM2 } = require('../utils/sm2');
 
 // @desc    Get user nodes
 // @route   GET /api/nodes
@@ -216,4 +217,72 @@ const syncNodes = async (req, res) => {
   }
 };
 
-module.exports = { getNodes, createNode, updateNode, deleteNode, syncNodes };
+// @desc    Review a specific item in a node (SR update)
+// @route   POST /api/nodes/:id/review
+const reviewNodeItem = async (req, res) => {
+  try {
+    const { itemType, itemIndex, quality } = req.body;
+    const node = await Node.findById(req.params.id);
+
+    if (!node) return res.status(404).json({ message: 'Node not found' });
+    if (node.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
+
+    if (!node.data || !node.data[itemType] || !node.data[itemType][itemIndex]) {
+        return res.status(400).json({ message: 'Invalid item type or index' });
+    }
+
+    const item = node.data[itemType][itemIndex];
+    const newSM2 = calculateSM2(item.sm2, quality);
+    
+    // Update the item safely
+    node.data[itemType][itemIndex].sm2 = newSM2;
+    node.markModified('data');
+
+    // Calculate aggregated mastery if needed
+    // node.mastery = ... 
+
+    await node.save();
+    res.json({ success: true, sm2: newSM2 });
+  } catch (error) {
+    console.error('Error in reviewNodeItem:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get nodes with due items
+// @route   GET /api/nodes/due
+const getDueNodes = async (req, res) => {
+  try {
+    const nodes = await Node.find({ user: req.user._id });
+    const now = new Date();
+    const todayStart = new Date(now.setHours(0,0,0,0)).getTime();
+
+    const dueNodes = nodes.filter(node => {
+        if (!node.data) return false;
+        const allItems = [
+            ...(node.data.flashcards || []),
+            ...(node.data.quiz || []),
+            ...(node.data.fillInBlanks || []),
+            ...(node.data.spotErrors || []),
+            ...(node.data.caseStudies || [])
+        ];
+        
+        return allItems.some(item => {
+            if (!item || !item.sm2 || !item.sm2.nextReviewDate) return false;
+            return new Date(item.sm2.nextReviewDate).getTime() <= todayStart;
+        });
+    }).map(n => {
+        const obj = n.toObject();
+        obj.id = obj._id;
+        delete obj._id;
+        return obj;
+    });
+
+    res.json(dueNodes);
+  } catch (error) {
+    console.error('Error in getDueNodes:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = { getNodes, createNode, updateNode, deleteNode, syncNodes, reviewNodeItem, getDueNodes };
