@@ -1,7 +1,8 @@
-
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { FeatureWindowControls } from './FeatureWindowControls';
-import { KnowledgeNode, AlchemyIntent, Quest, NodeShape, UserCluster } from '../types';
+import { LearningSideToolbar } from './LearningSideToolbar';
+import { useAppStore } from '../store/useAppStore';
+import { KnowledgeNode, UserCluster, AlchemyIntent, InteractionMode, Quest, NodeShape } from '../types';
 import { calculateNodeMastery } from '../services/sm2Service';
 import { useGamification } from '../contexts/GamificationContext';
 import { GuideTrigger } from './GuideSystem';
@@ -12,6 +13,7 @@ import { LearningHubSidebar } from './Graph/LearningHubSidebar';
 
 // Layout & UI
 import { GraphShell, ContextToolbar, ContextButton } from './GraphUI';
+import { EdgeToolbar } from './Graph/EdgeToolbar';
 
 // Graph Sub-Components
 import { SmartSearchBar, GraphBookmarkList } from './Graph/GraphNavigation';
@@ -46,6 +48,7 @@ import { NodeTakingNote } from './Graph/NodeTakingNote';
 import { ChangeNodeStyle } from './ChangeNodeStyle';
 import { DraggableFeatureNav } from './graph-popup-interacted-logic/DraggableFeatureNav';
 import { DroppableZone } from './DroppableZone';
+import Alchemy from './Alchemy';
 import { useDndActionStore } from '../stores/dndActionStore';
 
 const GraphDashboardCard: React.FC<{
@@ -237,6 +240,8 @@ interface ExploreGraphProps {
     intent?: any; 
     onClearIntent?: () => void; 
     onUpdateGraph?: (nodes: KnowledgeNode[]) => void;
+    onAddNodesAndCluster?: (nodes: KnowledgeNode[], cluster: UserCluster) => void;
+    userClusters?: UserCluster[];
 }
 
 const SignalWidget: React.FC<{ intent: any, onAccept: () => void, onDiscard: () => void }> = ({ intent, onAccept, onDiscard }) => {
@@ -322,14 +327,13 @@ const ClusterEditModal: React.FC<{
         </div>
     );
 };
-
 const ExploreGraph: React.FC<ExploreGraphProps> = ({ 
     onBack, onShowAbout, onSearch, onCategory, onLogout, onShowFAQ, onShowAccount, 
     userNodes = [], onNodeClick, onOpenNode, onAddNode, onDeleteNodes, 
     activeFilter, onClearFilter, focusedNodeId, onNavigateToAlchemy, onNavigateToFeature,
     quests = [], userXP = 0, userLevel = 1, currentAchievement, onClaimReward, onCloseAchievement,
     onGainXP, onRegisterQuest, onAddTask, onGoToFeatures, onToggleTodo, intent, onClearIntent, onUpdateGraph,
-    onMergeNodes, onStartPlaylist
+    onMergeNodes, onStartPlaylist, onAddNodesAndCluster, userClusters: sharedClusters
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -406,6 +410,14 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, currentX: number, currentY: number } | null>(null);
     const [showZoneActionModal, setShowZoneActionModal] = useState(false);
     const [zoneSelectedNodes, setZoneSelectedNodes] = useState<any[]>([]);
+
+    // --- NEW: EDGE SELECTION & STYLE ---
+    const [selectedEdge, setSelectedEdge] = useState<{ fromId: string, toId: string } | null>(null);
+    const [draggedClusterId, setDraggedClusterId] = useState<string | null>(null);
+    
+    // --- ALCHEMY INTEGRATION ---
+    const [showAlchemyForge, setShowAlchemyForge] = useState(false);
+    const [alchemyIntent, setAlchemyIntent] = useState<AlchemyIntent | null>(null);
     
     // New States for missing variables
     const [showStats, setShowStats] = useState(false);
@@ -418,9 +430,46 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const [isLearningHubOpen, setIsLearningHubOpen] = useState(false);
 
     const { isRankedMode, toggleRankedMode } = useGamification();
+    const { interactionMode, setInteractionMode } = useAppStore();
+
+    // Sync Global Interaction Mode
+    useEffect(() => {
+        if (interactionMode === 'linking') {
+            setIsLinkingMode(true);
+            setZoneToolActive(false);
+        } else if (interactionMode === 'clustering') {
+            setIsLinkingMode(false);
+            setZoneToolActive(true);
+        } else if (interactionMode === 'expanding') {
+            setIsLinkingMode(false);
+            setZoneToolActive(false);
+            if (selectedNodeIds.size === 1) {
+                const nodeId = Array.from(selectedNodeIds)[0];
+                const node = nodesRef.current.find(n => n.id === nodeId);
+                if (node) {
+                    setExpandingNode(node);
+                    setShowExpandModal(true);
+                }
+            }
+            // Reset to none after triggering if needed, or keep to show active state
+        } else {
+            setIsLinkingMode(false);
+            setZoneToolActive(false);
+        }
+    }, [interactionMode, selectedNodeIds]);
 
     // LOAD CLUSTERS FROM BACKEND
     useEffect(() => {
+        if (sharedClusters) {
+            setUserClusters(sharedClusters);
+            // We still need to load due nodes even if clusters are shared
+            const loadDueNodes = async () => {
+                const data = await getDueNodesFromBackend();
+                setDueNodes(data);
+            };
+            loadDueNodes();
+            return;
+        }
         const loadClusters = async () => {
             const data = await getClustersFromBackend();
             setUserClusters(data);
@@ -431,7 +480,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
         };
         loadClusters();
         loadDueNodes();
-    }, []);
+    }, [sharedClusters]);
 
     useEffect(() => {
         clustersRef.current = userClusters;
@@ -440,6 +489,18 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const handleExit = () => {
         if (onUpdateGraph) onUpdateGraph(nodesRef.current);
         onBack();
+    };
+
+    const getNodeColor = (type: string, mastery: number) => {
+        if (mastery >= 80) return '#FFD700'; // Gold for mastery
+        if (mastery <= 30) return '#FF5555'; // Red for low mastery
+        switch(type) {
+            case 'Flashcard': return '#4CC9F0'; 
+            case 'Quiz': return '#F72585'; 
+            case 'Case Study': return '#4361EE'; 
+            case 'Fill-in-the-blanks': return '#3F37C9';
+            default: return '#e2e8f0'; 
+        }
     };
 
     const fitViewToNodes = () => {
@@ -577,6 +638,40 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
         return () => setGraphActions(null);
     }, [setGraphActions, onAddNode, onUpdateGraph]);
 
+    const handleUpdateEdgeStyle = (fromId: string, toId: string, updates: any) => {
+        const updatedNodes = nodesRef.current.map(n => {
+            if (n.id === fromId) {
+                const updatedConns = (n.connections || []).map((c: any) => 
+                    c.targetId === toId ? { ...c, ...updates } : c
+                );
+                // If it wasn't in connections but was in connectedNodeIds, add it
+                if (!updatedConns.find((c: any) => c.targetId === toId)) {
+                    updatedConns.push({ targetId: toId, ...updates });
+                }
+                return { ...n, connections: updatedConns };
+            }
+            return n;
+        });
+        nodesRef.current = updatedNodes;
+        setNodes(updatedNodes);
+        if (onUpdateGraph) onUpdateGraph(updatedNodes);
+    };
+
+    const handleDeleteEdge = (fromId: string, toId: string) => {
+        const updatedNodes = nodesRef.current.map(n => {
+            if (n.id === fromId) {
+                const updatedConns = (n.connections || []).filter((c: any) => c.targetId !== toId);
+                const updatedLegacy = (n.connectedNodeIds || []).filter((id: string) => id !== toId);
+                return { ...n, connections: updatedConns, connectedNodeIds: updatedLegacy };
+            }
+            return n;
+        });
+        nodesRef.current = updatedNodes;
+        setNodes(updatedNodes);
+        setSelectedEdge(null);
+        if (onUpdateGraph) onUpdateGraph(updatedNodes);
+    };
+
     const handleAcceptSignal = () => {
         if (!intent) return;
         const title = intent.label || "New Node";
@@ -625,68 +720,147 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
         }));
     }, []);
 
-    const handleGlobalMouseUp = async () => {
-        // Clear normal click timer
-        if (longPressTimerRef.current) {
-            clearTimeout(longPressTimerRef.current);
-            longPressTimerRef.current = null;
+    // --- COORDINATE HELPERS ---
+    const toWorld = (screenX: number, screenY: number) => {
+        const t = transformRef.current;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const left = rect ? rect.left : 0;
+        const top = rect ? rect.top : 0;
+        
+        return {
+            x: (screenX - left - t.x) / t.k,
+            y: (screenY - top - t.y) / t.k
+        };
+    };
+
+    // --- HELPER: POINT IN POLYGON ---
+    const isPointInPolygon = (p: {x: number, y: number}, polygon: {x: number, y: number}[]) => {
+        let isInside = false;
+        if (polygon.length < 3) return false;
+        
+        let minX = polygon[0].x, maxX = polygon[0].x;
+        let minY = polygon[0].y, maxY = polygon[0].y;
+        for (let n = 1; n < polygon.length; n++) {
+            const q = polygon[n];
+            minX = Math.min(q.x, minX);
+            maxX = Math.max(q.x, maxX);
+            minY = Math.min(q.y, minY);
+            maxY = Math.max(q.y, maxY);
         }
 
-        // Clear link mode timer
-        if (linkModeTimerRef.current) {
-            clearTimeout(linkModeTimerRef.current);
-            linkModeTimerRef.current = null;
-        }
+        if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) return false;
 
-        // LINKING LOGIC
-        if (isLinkingMode) {
-            setIsLinkingMode(false);
-            const pathNodes = linkingPathRef.current;
-            // Need at least 3 nodes to form a cluster/polygon
-            if (pathNodes.length >= 3) {
-                // Save to Backend immediately
-                const newClusterPayload = {
-                    label: "Cụm mới",
-                    color: "#3b82f6",
-                    nodeIds: pathNodes.map(n => n.id)
-                };
-                
-                const saved = await createClusterInBackend(newClusterPayload);
-                
-                if (saved) {
-                    setUserClusters(prev => [...prev, saved]);
-                    setEditingClusterId(saved.id);
-                }
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            if ( (polygon[i].y > p.y) !== (polygon[j].y > p.y) &&
+                    p.x < (polygon[j].x - polygon[i].x) * (p.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x ) {
+                isInside = !isInside;
             }
-            linkingPathRef.current = [];
         }
-        
-        if (draggedNode && isNodeMovedRef.current) {
-             setNodes([...nodesRef.current]); // Sync after drag
-        }
-        
-        setIsDraggingCanvas(false);
-        setDraggedNode(null);
-        isNodeMovedRef.current = false;
-        isLongPressRef.current = false;
-        
-        setTransformState(transformRef.current);
+        return isInside;
     };
 
     useEffect(() => {
         const handleGlobalClick = () => {
             if(contextMenuPos) setContextMenuPos(null);
-        }
+        };
+
+        const handleGlobalMouseUp = async (e: MouseEvent) => {
+            // Check for node assimilation (dragging node into cluster)
+            if (draggedNode && !isLinkingMode) {
+                const node = nodesRef.current.find(n => n.id === draggedNode);
+                if (node) {
+                    const droppedCluster = userClusters.find(c => {
+                        if (!c.bounds) return false;
+                        return node.x >= c.bounds.minX && node.x <= c.bounds.maxX && 
+                               node.y >= c.bounds.minY && node.y <= c.bounds.maxY;
+                    });
+                    if (droppedCluster && !droppedCluster.nodeIds.includes(node.id)) {
+                        const clusterTags = droppedCluster.label.split(' ');
+                        const newTags = Array.from(new Set([...(node.tags || []), ...clusterTags]));
+                        
+                        const updatedCluster = { ...droppedCluster, nodeIds: [...droppedCluster.nodeIds, node.id] };
+                        const updatedNodes = nodesRef.current.map(n => n.id === node.id ? { ...n, tags: newTags } : n);
+                        
+                        setUserClusters(prev => prev.map(c => c.id === droppedCluster.id ? updatedCluster : c));
+                        nodesRef.current = updatedNodes;
+                        setNodes(updatedNodes);
+                        
+                        await updateClusterInBackend(updatedCluster);
+                        if (onUpdateGraph) onUpdateGraph(updatedNodes);
+                        if (onGainXP) onGainXP(10, "Gia nhập Vùng tri thức");
+                    }
+                }
+            }
+
+            // Clear timers
+            if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+            if (linkModeTimerRef.current) { clearTimeout(linkModeTimerRef.current); linkModeTimerRef.current = null; }
+
+            // LINKING LOGIC
+            if (isLinkingMode) {
+                setIsLinkingMode(false);
+                const pathNodes = linkingPathRef.current;
+                if (pathNodes.length >= 3) {
+                    const newClusterPayload = {
+                        label: "Cụm mới",
+                        color: "#3b82f6",
+                        nodeIds: pathNodes.map((n: any) => n.id)
+                    };
+                    const saved = await createClusterInBackend(newClusterPayload);
+                    if (saved) {
+                        setUserClusters(prev => [...prev, saved]);
+                        setEditingClusterId(saved.id);
+                    }
+                }
+                linkingPathRef.current = [];
+                document.body.style.cursor = 'default';
+            }
+            
+            if (draggedNode && isNodeMovedRef.current) {
+                 setNodes([...nodesRef.current]);
+                 if (onUpdateGraph) onUpdateGraph(nodesRef.current);
+            }
+            
+            setIsDraggingCanvas(false);
+            setDraggedNode(null);
+            setDraggedClusterId(null);
+            isNodeMovedRef.current = false;
+            isLongPressRef.current = false;
+            setTransformState(transformRef.current);
+        };
+
         window.addEventListener('mouseup', handleGlobalMouseUp);
         window.addEventListener('click', handleGlobalClick);
         return () => {
             window.removeEventListener('mouseup', handleGlobalMouseUp);
             window.removeEventListener('click', handleGlobalClick);
         };
-    }, [contextMenuPos, draggedNode, isLinkingMode]); 
+    }, [contextMenuPos, draggedNode, isLinkingMode, userClusters, onUpdateGraph, onGainXP]); 
+
+    const handleFocusNode = (nodeId: string) => {
+        const target = nodesRef.current.find(n => n.id === nodeId);
+        if (target && containerRef.current) {
+            const { width, height } = containerRef.current.getBoundingClientRect();
+            const newT = { 
+                x: width / 2 - target.x * 1.5, 
+                y: height / 2 - target.y * 1.5, 
+                k: 1.5 
+            };
+            transformRef.current = newT;
+            setTransformState(newT);
+            setSelectedNodeIds(new Set([nodeId]));
+            setFocusMode(true);
+        }
+    };
+
+    const handleStartRevisionSession = (nodesToLearn: KnowledgeNode[]) => {
+        if (nodesToLearn.length > 0 && onStartPlaylist) {
+             onStartPlaylist(nodesToLearn);
+        }
+    };
 
     useEffect(() => {
-        const newNodes = userNodes.map((n, idx) => {
+        const newNodes = userNodes.map((n) => {
             const existing = nodesRef.current.find(p => p.id === n.id);
             const mastery = calculateNodeMastery(n);
             const animPhase = Math.random() * Math.PI * 2; 
@@ -713,61 +887,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
              const timer = setTimeout(() => fitViewToNodes(), 200);
              return () => clearTimeout(timer);
         }
-
     }, [userNodes]); 
-
-    // ... (Node Revision handlers)
-    const handleFocusNode = (nodeId: string) => {
-        const target = nodesRef.current.find(n => n.id === nodeId);
-        if (target && containerRef.current) {
-            const { width, height } = containerRef.current.getBoundingClientRect();
-            const newT = {
-                x: width / 2 - target.x * 1.5,
-                y: height / 2 - target.y * 1.5,
-                k: 1.5
-            };
-            transformRef.current = newT;
-            setTransformState(newT);
-            setSelectedNodeIds(new Set([nodeId]));
-            setFocusMode(true);
-        }
-    };
-
-    const handleStartRevisionSession = (nodesToLearn: KnowledgeNode[]) => {
-        if (nodesToLearn.length > 0 && onStartPlaylist) {
-             onStartPlaylist(nodesToLearn);
-        }
-    };
-
-    useEffect(() => {
-        if (focusedNodeId && nodesRef.current.length > 0 && containerRef.current) {
-            const target = nodesRef.current.find(n => n.id === focusedNodeId);
-            if (target) {
-                const { width, height } = containerRef.current.getBoundingClientRect();
-                const newT = {
-                    x: width / 2 - target.x * 1.5,
-                    y: height / 2 - target.y * 1.5,
-                    k: 1.5
-                };
-                transformRef.current = newT;
-                setTransformState(newT);
-                setSelectedNodeIds(new Set([focusedNodeId]));
-                setFocusMode(true); 
-            }
-        }
-    }, [focusedNodeId]); 
-
-    const getNodeColor = (type: string, mastery: number) => {
-        if (mastery >= 80) return '#FFD700'; 
-        if (mastery <= 30) return '#FF5555'; 
-        switch(type) {
-            case 'Flashcard': return '#4CC9F0'; 
-            case 'Quiz': return '#F72585'; 
-            case 'Case Study': return '#4361EE'; 
-            case 'Fill-in-the-blanks': return '#3F37C9';
-            default: return '#e2e8f0'; 
-        }
-    };
 
     // --- GAME LOOP & RENDERER ---
     useEffect(() => {
@@ -776,18 +896,67 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Local helper for animate loop to fix 'screenToWorld' undefined error
-        const screenToWorld = (screenX: number, screenY: number) => {
+        const screenToWorldFull = (screenX: number, screenY: number) => {
             const t = transformRef.current;
             const rect = canvasRef.current?.getBoundingClientRect();
             const left = rect ? rect.left : 0;
             const top = rect ? rect.top : 0;
-            
             return {
                 x: (screenX - left - t.x) / t.k,
                 y: (screenY - top - t.y) / t.k
             };
         };
+
+        function drawLink(ctx: CanvasRenderingContext2D, n1: any, n2: any, scale: number, t: number, highlighted: boolean, meta?: any) {
+            const isDashed = meta?.style === 'dashed';
+            const hasArrow = meta?.hasArrow;
+            const label = meta?.label;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(n1.x, n1.y);
+            ctx.lineTo(n2.x, n2.y);
+            
+            ctx.strokeStyle = highlighted ? '#fff' : (meta?.color || 'rgba(34, 211, 238, 0.4)');
+            ctx.lineWidth = (highlighted ? 3 : 1.5) / scale;
+            if (isDashed) ctx.setLineDash([10 / scale, 5 / scale]);
+            ctx.stroke();
+
+            // Draw Arrow
+            if (hasArrow) {
+                const angle = Math.atan2(n2.y - n1.y, n2.x - n1.x);
+                const headLen = 15 / scale;
+                const arrowX = n2.x - (n2.radius || 24) * Math.cos(angle);
+                const arrowY = n2.y - (n2.radius || 24) * Math.sin(angle);
+                
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.moveTo(arrowX, arrowY);
+                ctx.lineTo(arrowX - headLen * Math.cos(angle - Math.PI / 6), arrowY - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.lineTo(arrowX - headLen * Math.cos(angle + Math.PI / 6), arrowY - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.closePath();
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.fill();
+            }
+
+            // Draw Label
+            if (label && scale > 0.5) {
+                const midX = (n1.x + n2.x) / 2;
+                const midY = (n1.y + n2.y) / 2;
+                ctx.setLineDash([]);
+                ctx.font = `${12/scale}px Lexend`;
+                const mw = ctx.measureText(label).width;
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(midX - mw/2 - 4/scale, midY - 10/scale, mw + 8/scale, 20/scale);
+                
+                ctx.fillStyle = highlighted ? '#fff' : '#22d3ee';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, midX, midY);
+            }
+            ctx.restore();
+        }
 
         let animationFrameId: number;
         let time = 0;
@@ -840,303 +1009,181 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
             const currentNodes = nodesRef.current;
             const currentClusters = clustersRef.current;
 
-            // 1.5. DRAW CLUSTERS (Background Polygons)
+            // 1.5. DRAW CLUSTERS
             ctx.save();
             ctx.translate(tX, tY);
             ctx.scale(tK, tK);
-            
             currentClusters.forEach(cluster => {
-                const clusterNodes = cluster.nodeIds.map(id => currentNodes.find(n => n.id === id)).filter(Boolean);
-                if (clusterNodes.length < 3) return;
+                const clusterNodesList = cluster.nodeIds.map(id => currentNodes.find(n => n.id === id)).filter(Boolean);
+                if (clusterNodesList.length === 0) return;
 
-                // Calculate Centroid (for Label position)
-                const cx = clusterNodes.reduce((acc, n) => acc + n.x, 0) / clusterNodes.length;
-                const cy = clusterNodes.reduce((acc, n) => acc + n.y, 0) / clusterNodes.length;
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                clusterNodesList.forEach(n => {
+                    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+                    maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+                });
+                const pad = 60 / tK;
+                minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+                const cx = (minX + maxX) / 2;
+                const cy = (minY + maxY) / 2;
                 cluster.centroid = { x: cx, y: cy };
 
-                ctx.beginPath();
-                ctx.moveTo(clusterNodes[0].x, clusterNodes[0].y);
-                for (let i = 1; i < clusterNodes.length; i++) {
-                    ctx.lineTo(clusterNodes[i].x, clusterNodes[i].y);
+                // Find max distance from center for circular look
+                let maxDist = 0;
+                clusterNodesList.forEach(n => {
+                    const d = Math.hypot(n.x - cx, n.y - cy);
+                    if (d > maxDist) maxDist = d;
+                });
+                
+                const clusterRadius = maxDist + 80 / tK;
+                cluster.bounds = { minX, minY, maxX, maxY, radius: clusterRadius };
+
+                if (draggedClusterId === cluster.id) {
+                    const worldPos = screenToWorldFull(mousePosRef.current.x, mousePosRef.current.y);
+                    const dx = worldPos.x - cx;
+                    const dy = worldPos.y - cy;
+                    clusterNodesList.forEach(n => { n.x += dx; n.y += dy; });
                 }
-                ctx.closePath();
 
-                // Fill Style
+                ctx.beginPath();
+                // Draw a circle for a more organic look as requested ("hình tròn")
+                ctx.arc(cx, cy, clusterRadius, 0, Math.PI * 2);
                 ctx.fillStyle = cluster.color || '#3b82f6';
-                ctx.globalAlpha = 0.15;
+                ctx.globalAlpha = 0.08;
                 ctx.fill();
-
-                // Stroke Style
+                
+                // Glow effect for circular region
+                ctx.shadowBlur = 40 / tK;
+                ctx.shadowColor = cluster.color || '#3b82f6';
+                ctx.strokeStyle = cluster.color || '#3b82f6';
+                ctx.lineWidth = 3 / tK;
+                ctx.setLineDash([15/tK, 10/tK]);
+                ctx.globalAlpha = 0.2;
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.shadowBlur = 0;
+                ctx.setLineDash([10/tK, 5/tK]);
                 ctx.strokeStyle = cluster.color || '#3b82f6';
                 ctx.lineWidth = 2 / tK;
-                ctx.globalAlpha = 0.4;
+                ctx.globalAlpha = 0.3;
                 ctx.stroke();
+                ctx.setLineDash([]);
 
-                // Label (at Centroid)
-                if (tK > 0.4) {
-                    ctx.globalAlpha = 0.8;
+                if (tK > 0.3) {
+                    ctx.globalAlpha = 0.9;
+                    ctx.font = `bold ${14/tK}px "Lexend"`;
+                    const m = ctx.measureText(cluster.label);
+                    const bw = m.width + 20/tK, bh = 24/tK;
+                    ctx.fillStyle = cluster.color || '#3b82f6';
+                    ctx.beginPath();
+                    ctx.roundRect(cx - bw/2, minY - bh/2, bw, bh, 8/tK);
+                    ctx.fill();
                     ctx.fillStyle = '#fff';
-                    ctx.font = `bold ${16/tK}px "Lexend"`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(cluster.label, cx, cy);
+                    ctx.fillText(cluster.label, cx, minY);
                 }
             });
             ctx.restore();
 
-
-            // 2. Physics Update
-            let totalKineticEnergy = 0;
+            // 2. Physics & 3. Links
             currentNodes.forEach(node => {
                 if (node.id === draggedNode) return;
-                if (Math.abs(node.vx) < 0.01 && Math.abs(node.vy) < 0.01) {
-                    node.vx = 0; node.vy = 0;
-                }
                 let fx = 0, fy = 0;
                 for (let j = 0; j < currentNodes.length; j++) {
                     const other = currentNodes[j];
                     if (node.id === other.id) continue;
-                    const dx = node.x - other.x;
-                    const dy = node.y - other.y;
-                    if (Math.abs(dx) > 600 || Math.abs(dy) > 600) continue;
-                    let distSq = dx * dx + dy * dy;
-                    if (distSq < 100) distSq = 100;
-                    const force = 5000 / distSq; 
+                    const dx = node.x - other.x, dy = node.y - other.y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < 100 || distSq > 360000) continue;
+                    const force = 5000 / distSq;
                     const dist = Math.sqrt(distSq);
-                    fx += (dx / dist) * force;
-                    fy += (dy / dist) * force;
+                    fx += (dx / dist) * force; fy += (dy / dist) * force;
                 }
-                fx += (0 - node.x) * 0.0003; 
-                fy += (0 - node.y) * 0.0003;
-                node.vx = (node.vx + fx) * 0.90; 
-                node.vy = (node.vy + fy) * 0.90;
-                node.x += node.vx; 
-                node.y += node.vy;
-                totalKineticEnergy += Math.abs(node.vx) + Math.abs(node.vy);
+                fx += (0 - node.x) * 0.0003; fy += (0 - node.y) * 0.0003;
+                node.vx = (node.vx + fx) * 0.90; node.vy = (node.vy + fy) * 0.90;
+                node.x += node.vx; node.y += node.vy;
             });
 
             ctx.save();
             ctx.translate(tX, tY);
             ctx.scale(tK, tK);
-            
-            // 3. Draw Links
-            currentNodes.forEach((node, i) => {
+            currentNodes.forEach(node => {
                 if (hiddenNodeIds.has(node.id)) return;
-                if (activeFilter && (!node.tags?.includes(activeFilter))) return;
-                
                 if (node.parentNodeId) {
                     const parent = currentNodes.find(n => n.id === node.parentNodeId);
-                    if (parent && !hiddenNodeIds.has(parent.id)) {
-                        drawLink(ctx, node, parent, tK, time, false);
-                    }
+                    if (parent) drawLink(ctx, node, parent, tK, time, false);
                 }
-                
-                if (node.connectedNodeIds) {
-                    node.connectedNodeIds.forEach((targetId: string) => {
-                         const target = currentNodes.find(n => n.id === targetId);
-                         if (target && !hiddenNodeIds.has(target.id)) {
-                             if (node.id > target.id) drawLink(ctx, node, target, tK, time, false);
-                         }
+                if (node.connections) {
+                    node.connections.forEach((conn: any) => {
+                        const target = currentNodes.find(n => n.id === conn.targetId);
+                        if (target) {
+                            const isSel = selectedEdge?.fromId === node.id && selectedEdge?.toId === conn.targetId;
+                            drawLink(ctx, node, target, tK, time, isSel, conn);
+                        }
                     });
                 }
             });
-            
-            function drawLink(ctx: CanvasRenderingContext2D, n1: any, n2: any, scale: number, t: number, highlighted: boolean) {
-                ctx.beginPath();
-                ctx.moveTo(n1.x, n1.y);
-                ctx.lineTo(n2.x, n2.y);
-                ctx.strokeStyle = highlighted ? '#22d3ee' : 'rgba(34, 211, 238, 0.2)';
-                ctx.lineWidth = (highlighted ? 2 : 1) / scale;
-                ctx.stroke();
-            }
 
-            // 4. Draw Nodes
+            // 4. Nodes
             currentNodes.forEach(node => {
                 if (hiddenNodeIds.has(node.id)) return;
-                if (activeFilter && (!node.tags?.includes(activeFilter))) return;
-                
                 const isSelected = selectedNodeIds.has(node.id);
                 const isHovered = hoveredNodeIdRef.current === node.id;
-
-                const sx = node.x * tK + tX;
-                const sy = node.y * tK + tY;
-                if (sx < -50 || sy < -50 || sx > width + 50 || sy > height + 50) return;
-
                 const radius = node.radius || 24;
+
                 ctx.beginPath();
                 if (node.shape === 'square') ctx.rect(node.x - radius, node.y - radius, radius * 2, radius * 2);
                 else ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
                 
-                // --- G-LEARNING: BLOCKED NODE VISUALS ---
-                const isBlocked = node.isBlocked;
-                
-                if (isBlocked) {
-                    ctx.globalAlpha = 0.4;
-                    ctx.fillStyle = '#334155'; // Slate-700
-                } else {
-                    ctx.fillStyle = node.color;
+                ctx.fillStyle = node.isBlocked ? '#334155' : node.color;
+                ctx.globalAlpha = node.isBlocked ? 0.4 : 1;
+                if (isSelected || isHovered) {
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = node.color;
                 }
-                
-                if (tK > 0.5 || isSelected) {
-                    ctx.shadowBlur = isSelected ? 20 : 10;
-                    ctx.shadowColor = isBlocked ? '#ef4444' : node.color;
-                } else {
-                    ctx.shadowBlur = 0;
-                }
-                
                 ctx.fill();
-                ctx.shadowBlur = 0; 
-                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 
                 if (isSelected || isHovered) {
-                    ctx.strokeStyle = isBlocked ? '#f87171' : '#fff';
-                    ctx.lineWidth = 3 / tK;
-                    ctx.stroke();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3 / tK; ctx.stroke();
                 }
 
-                // Draw Lock Icon for Blocked Nodes
-                if (isBlocked) {
-                    ctx.fillStyle = '#ef4444';
-                    ctx.font = `bold ${radius/tK}px "Material Symbols Outlined"`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('lock', node.x, node.y);
-                }
-
-                if (tK > 0.6 || isSelected || isHovered) {
-                    ctx.font = `bold ${14/tK}px "Lexend"`;
-                    const metrics = ctx.measureText(node.title);
-                    const labelY = node.y + radius + (20/tK);
-                    
-                    ctx.fillStyle = isBlocked ? 'rgba(127,29,29,0.7)' : 'rgba(0,0,0,0.7)';
-                    ctx.beginPath();
-                    const pad = 4/tK;
-                    ctx.rect(node.x - metrics.width/2 - pad, labelY - 10/tK - pad, metrics.width + pad*2, 20/tK);
-                    ctx.fill();
-
-                    ctx.fillStyle = isBlocked ? '#fca5a5' : '#fff';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(node.title, node.x, labelY);
-                }
-
-                // 4.1. DRAW DUE BADGE/GLOW
-                const isDue = dueNodes.some(dn => dn.id === node.id);
-                if (isDue) {
-                    ctx.save();
-                    // Pulse effect
-                    const pulse = Math.sin(time * 5) * 5 + 10;
-                    ctx.shadowBlur = pulse;
-                    ctx.shadowColor = '#facc15'; // Yellow/Gold glow
-                    ctx.strokeStyle = '#facc15';
-                    ctx.lineWidth = 3 / tK;
-                    ctx.beginPath();
-                    if (node.shape === 'square') ctx.rect(node.x - radius - 2, node.y - radius - 2, radius * 2 + 4, radius * 2 + 4);
-                    else ctx.arc(node.x, node.y, radius + 2, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.restore();
-
-                    // Small indicator badge
-                    ctx.fillStyle = '#facc15';
-                    ctx.beginPath();
-                    ctx.arc(node.x + radius, node.y - radius, 8/tK, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = '#000';
-                    ctx.font = `bold ${10/tK}px "Lexend"`;
-                    ctx.fillText('!', node.x + radius, node.y - radius);
+                if (tK > 0.6 || isSelected) {
+                    ctx.font = `bold ${14/tK}px Lexend`;
+                    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+                    ctx.fillText(node.title, node.x, node.y + radius + 20/tK);
                 }
             });
 
-            // 5. DRAW LINKING PATH (Active Drag)
+            // 5. Linking Path
             if (isLinkingMode && linkingPathRef.current.length > 0) {
-                const pathNodes = linkingPathRef.current;
-                
+                const path = linkingPathRef.current;
                 ctx.beginPath();
-                ctx.moveTo(pathNodes[0].x, pathNodes[0].y);
-                for (let i = 1; i < pathNodes.length; i++) {
-                    ctx.lineTo(pathNodes[i].x, pathNodes[i].y);
-                }
-                // Draw to current mouse pos using local helper
-                const mouseWorld = screenToWorld(mousePosRef.current.x, mousePosRef.current.y);
-                ctx.lineTo(mouseWorld.x, mouseWorld.y);
-                
-                ctx.strokeStyle = '#facc15'; // Yellow
-                ctx.lineWidth = 3 / tK;
-                ctx.setLineDash([10 / tK, 10 / tK]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // Draw connector circles
-                pathNodes.forEach(node => {
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, (node.radius || 24) + 5/tK, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#facc15';
-                    ctx.lineWidth = 2 / tK;
-                    ctx.stroke();
-                });
+                ctx.moveTo(path[0].x, path[0].y);
+                for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+                const mw = screenToWorldFull(mousePosRef.current.x, mousePosRef.current.y);
+                ctx.lineTo(mw.x, mw.y);
+                ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3 / tK; ctx.setLineDash([10/tK, 10/tK]);
+                ctx.stroke(); ctx.setLineDash([]);
             }
-
             ctx.restore();
 
-            // Zone Selection Box (Screen Space)
-             if (zoneToolActive && selectionBox) {
+            if (zoneToolActive && selectionBox) {
                 const { startX, startY, currentX, currentY } = selectionBox;
-                ctx.save();
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
                 ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([6, 4]);
-                ctx.fillStyle = 'rgba(6, 182, 212, 0.15)'; 
-                const w = currentX - startX;
-                const h = currentY - startY;
-                ctx.fillRect(startX, startY, w, h);
-                ctx.strokeRect(startX, startY, w, h);
-                ctx.restore();
+                ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+                ctx.fillRect(startX, startY, currentX - startX, currentY - startY);
+                ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+                ctx.setLineDash([]);
             }
 
             animationFrameId = requestAnimationFrame(animate);
         };
         animate();
         return () => cancelAnimationFrame(animationFrameId);
-    }, [draggedNode, selectedNodeIds, activeFilter, zoneToolActive, selectionBox, layers, focusMode, isLinkingMode]); 
-
-    const toWorld = (screenX: number, screenY: number) => {
-        const t = transformRef.current;
-        const rect = canvasRef.current?.getBoundingClientRect();
-        const left = rect ? rect.left : 0;
-        const top = rect ? rect.top : 0;
-        
-        return {
-            x: (screenX - left - t.x) / t.k,
-            y: (screenY - top - t.y) / t.k
-        };
-    };
-
-    // --- HELPER: POINT IN POLYGON ---
-    const isPointInPolygon = (p: {x: number, y: number}, polygon: {x: number, y: number}[]) => {
-        let isInside = false;
-        let minX = polygon[0].x, maxX = polygon[0].x;
-        let minY = polygon[0].y, maxY = polygon[0].y;
-        for (let n = 1; n < polygon.length; n++) {
-            const q = polygon[n];
-            minX = Math.min(q.x, minX);
-            maxX = Math.max(q.x, maxX);
-            minY = Math.min(q.y, minY);
-            maxY = Math.max(q.y, maxY);
-        }
-
-        if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) {
-            return false;
-        }
-
-        // Fixed loop syntax
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-            if ( (polygon[i].y > p.y) !== (polygon[j].y > p.y) &&
-                    p.x < (polygon[j].x - polygon[i].x) * (p.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x ) {
-                isInside = !isInside;
-            }
-        }
-        return isInside;
-    };
+    }, [draggedNode, selectedNodeIds, activeFilter, zoneToolActive, selectionBox, layers, focusMode, isLinkingMode, selectedEdge, draggedClusterId]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         const worldPos = toWorld(e.clientX, e.clientY);
@@ -1144,11 +1191,9 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
         lastMousePos.current = { x: e.clientX, y: e.clientY };
         isLongPressRef.current = false;
         
-        // Right Click
         if (e.button === 2) { 
              const clickedNode = [...nodesRef.current].reverse().find(node => {
-                const dx = node.x - worldPos.x;
-                const dy = node.y - worldPos.y;
+                const dx = node.x - worldPos.x, dy = node.y - worldPos.y;
                 return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 5;
             });
             if (clickedNode) {
@@ -1164,59 +1209,73 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
         }
 
         const clickedNode = [...nodesRef.current].reverse().find(node => {
-            const dx = node.x - worldPos.x;
-            const dy = node.y - worldPos.y;
+            const dx = node.x - worldPos.x, dy = node.y - worldPos.y;
             return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 10; 
         });
 
+        if (!clickedNode) {
+            const clickedCluster = userClusters.find(c => {
+                if (!c.centroid || !c.bounds) return false;
+                const dist = Math.hypot(worldPos.x - c.centroid.x, worldPos.y - c.bounds.minY);
+                return dist < 40 / transformRef.current.k;
+            });
+            if (clickedCluster) {
+                setDraggedClusterId(clickedCluster.id);
+                document.body.style.cursor = 'move';
+                return;
+            }
+        }
+
         if (clickedNode) {
-            // Setup potential link start
-            // Don't drag yet, wait for long press
-            
-            // Standard Drag & Long Press Logic
             setDraggedNode(clickedNode.id);
-            isNodeMovedRef.current = false;
-            
-            // LONG PRESS FOR LINKING (>2s)
             linkModeTimerRef.current = setTimeout(() => {
-                // If we haven't moved much, start link mode
                 setIsLinkingMode(true);
                 linkingPathRef.current = [clickedNode];
-                // visual feedback
                 document.body.style.cursor = 'crosshair';
             }, 2000); 
 
-            // Standard Click/Drag Timer (0.5s) for context menu or selection
             longPressTimerRef.current = setTimeout(() => {
                 isLongPressRef.current = true;
                 if (!isLinkingMode) {
-                     if (!e.ctrlKey) {
-                        setSelectedNodeIds(new Set([clickedNode.id]));
-                    } else {
+                     if (!e.ctrlKey) setSelectedNodeIds(new Set([clickedNode.id]));
+                     else {
                         const newSet = new Set(selectedNodeIds);
                         newSet.has(clickedNode.id) ? newSet.delete(clickedNode.id) : newSet.add(clickedNode.id);
                         setSelectedNodeIds(newSet);
-                    }
+                     }
                 }
             }, 500);
-
         } else {
-            // Clicked Empty Space
-            // Check if clicked inside a Cluster
             const clickedCluster = userClusters.find(c => {
                  const clusterNodes = c.nodeIds.map(id => nodesRef.current.find(n => n.id === id)).filter(Boolean);
                  if (clusterNodes.length < 3) return false;
-                 return isPointInPolygon(worldPos, clusterNodes.map(n => ({x: n.x, y: n.y})));
+                 return isPointInPolygon(worldPos, clusterNodes.map((n: any) => ({x: n.x, y: n.y})));
             });
 
-            if (clickedCluster) {
-                setEditingClusterId(clickedCluster.id);
-            } else {
-                setIsDraggingCanvas(true);
-                document.body.style.cursor = 'grabbing';
-                if(!e.ctrlKey) {
-                    setSelectedNodeIds(new Set());
-                    setFocusMode(false);
+            if (clickedCluster) setEditingClusterId(clickedCluster.id);
+            else {
+                let foundLink = null;
+                for (const node of nodesRef.current) {
+                    const targets = [...(node.connectedNodeIds || []), ...(node.connections?.map((c: any) => c.targetId) || [])];
+                    for (const targetId of targets) {
+                        const target = nodesRef.current.find(n => n.id === targetId);
+                        if (!target) continue;
+                        const x1 = node.x, y1 = node.y, x2 = target.x, y2 = target.y;
+                        const lenSq = Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2);
+                        if (lenSq === 0) continue;
+                        let t = ((worldPos.x - x1) * (x2 - x1) + (worldPos.y - y1) * (y2 - y1)) / lenSq;
+                        t = Math.max(0, Math.min(1, t));
+                        const dist = Math.sqrt(Math.pow(worldPos.x - (x1 + t * (x2 - x1)), 2) + Math.pow(worldPos.y - (y1 + t * (y2 - y1)), 2));
+                        if (dist < 25 / transformRef.current.k) { // Increased from 10 to 25 for easier selection
+                            foundLink = { fromId: node.id, toId: target.id }; break;
+                        }
+                    }
+                    if (foundLink) break;
+                }
+                if (foundLink) setSelectedEdge(foundLink);
+                else {
+                    setSelectedEdge(null); setIsDraggingCanvas(true); document.body.style.cursor = 'grabbing';
+                    if(!e.ctrlKey) { setSelectedNodeIds(new Set()); setFocusMode(false); }
                 }
             }
         }
@@ -1225,114 +1284,69 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const handleMouseMove = (e: React.MouseEvent) => {
         const worldPos = toWorld(e.clientX, e.clientY);
         mousePosRef.current = { x: e.clientX, y: e.clientY };
-
         const moveDist = Math.hypot(e.clientX - clickStartPosRef.current.x, e.clientY - clickStartPosRef.current.y);
 
         if (moveDist > 5) {
-            // If user moves, cancel long press timers if they haven't fired yet
-            // If linking mode is active, we KEEP dragging connection
-            // If standard drag is active, we move node
-            
-            if (!isLinkingMode && linkModeTimerRef.current) {
-                 clearTimeout(linkModeTimerRef.current);
-                 linkModeTimerRef.current = null;
-            }
-            if (!isLinkingMode && longPressTimerRef.current) {
-                 clearTimeout(longPressTimerRef.current);
-                 longPressTimerRef.current = null;
-            }
+            if (linkModeTimerRef.current) { clearTimeout(linkModeTimerRef.current); linkModeTimerRef.current = null; }
+            if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
         }
 
         if (zoneToolActive && selectionBox) {
-            setSelectionBox(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
-            return;
+            setSelectionBox(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null); return;
         }
 
-        // HOVER CHECK OPTIMIZATION
-        if (!isDraggingCanvas && !draggedNode && !isLinkingMode) {
-            const hovered = [...nodesRef.current].reverse().find(node => {
-                const dx = node.x - worldPos.x;
-                const dy = node.y - worldPos.y;
-                return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 5;
-            });
-            
-            const newId = hovered ? hovered.id : null;
-            if (newId !== hoveredNodeIdRef.current) {
-                hoveredNodeIdRef.current = newId;
-                setHoveredNodeId(newId); 
-            }
-        }
-
-        if (isLinkingMode) {
-            // Check collision with nodes to add to path
-            const hovered = nodesRef.current.find(node => {
-                const dx = node.x - worldPos.x;
-                const dy = node.y - worldPos.y;
-                return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 15; // Larger hit area
-            });
-
-            if (hovered) {
-                // If not already in path (or at least not the immediate last one)
-                // We want to allow re-entering? No, unique nodes usually for cluster
-                const currentPath = linkingPathRef.current;
-                if (!currentPath.find(n => n.id === hovered.id)) {
-                    linkingPathRef.current = [...currentPath, hovered];
-                }
-            }
-        }
-        
-        else if (isDraggingCanvas) {
+        if (isDraggingCanvas) {
             const dx = e.clientX - lastMousePos.current.x;
             const dy = e.clientY - lastMousePos.current.y;
-            
-            transformRef.current = {
-                ...transformRef.current,
-                x: transformRef.current.x + dx,
-                y: transformRef.current.y + dy
-            };
-            
+            transformRef.current = { ...transformRef.current, x: transformRef.current.x + dx, y: transformRef.current.y + dy };
+            setTransformState({ ...transformRef.current });
             lastMousePos.current = { x: e.clientX, y: e.clientY };
-            
-        } else if (draggedNode) {
-            isNodeMovedRef.current = true;
+        } else if (draggedNode && !isLinkingMode) {
             const node = nodesRef.current.find(n => n.id === draggedNode);
             if (node) {
-                node.x = worldPos.x;
-                node.y = worldPos.y;
-                node.vx = 0;
-                node.vy = 0;
+                node.x = worldPos.x; node.y = worldPos.y; node.vx = 0; node.vy = 0;
+                isNodeMovedRef.current = true;
             }
+        } else if (isLinkingMode) {
+            const hovered = nodesRef.current.find(node => {
+                const dx = node.x - worldPos.x, dy = node.y - worldPos.y;
+                return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 10;
+            });
+            if (hovered && !linkingPathRef.current.includes(hovered)) {
+                linkingPathRef.current = [...linkingPathRef.current, hovered];
+            }
+        }
+
+        if (!isDraggingCanvas && !draggedNode && !isLinkingMode) {
+            const hovered = [...nodesRef.current].reverse().find(node => {
+                const dx = node.x - worldPos.x, dy = node.y - worldPos.y;
+                return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 5;
+            });
+            const newId = hovered ? hovered.id : null;
+            if (newId !== hoveredNodeIdRef.current) { hoveredNodeIdRef.current = newId; setHoveredNodeId(newId); }
         }
     };
 
-    // ... (Keep handleWheel, handleZoomIn/Out, etc.)
     const handleMouseUp = (e: React.MouseEvent) => {
         const moveDist = Math.hypot(e.clientX - clickStartPosRef.current.x, e.clientY - clickStartPosRef.current.y);
         
         if (moveDist < 5 && !isLongPressRef.current && !isLinkingMode && e.button === 0) {
             const worldPos = toWorld(e.clientX, e.clientY);
             const clickedNode = [...nodesRef.current].reverse().find(node => {
-                const dx = node.x - worldPos.x;
-                const dy = node.y - worldPos.y;
+                const dx = node.x - worldPos.x, dy = node.y - worldPos.y;
                 return Math.sqrt(dx*dx + dy*dy) < (node.radius || 24) + 10; 
             });
 
             if (clickedNode) {
-                if (onNodeClick) {
-                    onNodeClick(clickedNode);
-                }
-                if (!e.ctrlKey) {
-                    setSelectedNodeIds(new Set([clickedNode.id]));
-                } else {
+                if (onNodeClick) onNodeClick(clickedNode);
+                if (!e.ctrlKey) setSelectedNodeIds(new Set([clickedNode.id]));
+                else {
                     const newSet = new Set(selectedNodeIds);
                     newSet.has(clickedNode.id) ? newSet.delete(clickedNode.id) : newSet.add(clickedNode.id);
                     setSelectedNodeIds(newSet);
                 }
             } else {
-                if (!e.ctrlKey) {
-                    setSelectedNodeIds(new Set());
-                    setFocusMode(false);
-                }
+                if (!e.ctrlKey) { setSelectedNodeIds(new Set()); setFocusMode(false); }
             }
         }
     };
@@ -1392,30 +1406,58 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const selectedNodesData = userNodes.filter(n => selectedNodeIds.has(n.id));
     const singleSelectedNode = selectedNodesData.length === 1 ? selectedNodesData[0] : null;
 
-    const handleTriggerAlchemy = (intentType: 'create' | 'expand' | 'refine' | 'connect' | 'visualize' | 'quiz' | 'repair' | 'search_create' | 'style_transfer' | 'edit') => {
-        if (intentType === 'style_transfer') {
-             if (singleSelectedNode) {
-                 setStylingNode(singleSelectedNode);
-                 setShowStyleModal(true);
-             }
-             return;
-        }
+    const handleTriggerAlchemy = (intentType: AlchemyIntent['type']) => {
         if (onNavigateToAlchemy) {
-            if (intentType === 'edit') {
-                 if (singleSelectedNode) {
-                    onNavigateToAlchemy({
-                        type: 'edit',
-                        targetNodeId: singleSelectedNode.id
-                    });
-                 }
+            if (intentType === 'search_create') {
+                onNavigateToAlchemy({ type: 'create', initialQuery: searchQuery });
             } else {
                 onNavigateToAlchemy({
                     type: intentType,
                     sourceNodes: selectedNodesData
                 });
             }
+        } else {
+            // Local Alchemy Forge Modal
+            if (intentType === 'search_create') {
+                setAlchemyIntent({ type: 'create', initialQuery: searchQuery });
+            } else {
+                setAlchemyIntent({
+                    type: intentType,
+                    sourceNodes: selectedNodesData
+                });
+            }
+            setShowAlchemyForge(true);
         }
     };
+
+    const handleNewNodesAndClusterFromAlchemy = (newNodes: KnowledgeNode[], cluster: UserCluster) => {
+        // 1. Add nodes
+        const nodesToAdd = newNodes.map((n, i) => ({
+            ...n,
+            x: n.x ?? (Math.random() - 0.5) * 400,
+            y: n.y ?? (Math.random() - 0.5) * 400,
+            vx: 0,
+            vy: 0
+        }));
+        
+        setNodes(prev => [...prev, ...nodesToAdd]);
+        
+        // 2. Add cluster for "khoanh vùng"
+        if (cluster) {
+            setUserClusters(prev => [...prev, cluster]);
+            setShowClusterBoundaries(true);
+        }
+        
+        // 3. UI logic
+        setShowAlchemyForge(false);
+        setAlchemyIntent(null);
+        
+        // Fit view to include new nodes
+        setTimeout(() => fitViewToNodes(), 500);
+        
+        if (onAddNodesAndCluster) onAddNodesAndCluster(newNodes, cluster);
+    };
+
     
     const handleOpenPanel = (tab: any) => {
         setActivePanelTab(tab);
@@ -1601,6 +1643,13 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                      if (dueNode && onOpenNode) onOpenNode(dueNode);
                      setIsLearningHubOpen(false);
                 }}
+            />
+
+            {/* MAIN GRAPH TOOLBAR (FIXED ON LEFT) */}
+            <LearningSideToolbar 
+                activeMode={interactionMode} 
+                onModeChange={setInteractionMode}
+                className="fixed left-6 top-1/2 -translate-y-1/2" 
             />
 
             {/* FLOATING ACTION BUTTONS */}
@@ -1813,6 +1862,19 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                 <QuizGeneratorPanel isOpen={showQuizGen} onClose={() => setShowQuizGen(false)} />
                 <ZoneActionModal isOpen={showZoneActionModal} onClose={() => setShowZoneActionModal(false)} nodeCount={zoneSelectedNodes.length} onAction={handleZoneAction} />
 
+                {/* Link Customization Toolbar - High Z-Index to stay on top */}
+                {selectedEdge && (
+                    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[250] animate-slide-up">
+                        <EdgeToolbar 
+                            edge={selectedEdge}
+                            initialData={nodesRef.current.find(n => n.id === selectedEdge.fromId)?.connections?.find((c: any) => c.targetId === selectedEdge.toId)}
+                            onUpdate={(updates) => handleUpdateEdgeStyle(selectedEdge.fromId, selectedEdge.toId, updates)}
+                            onClose={() => setSelectedEdge(null)}
+                            onDelete={() => handleDeleteEdge(selectedEdge.fromId, selectedEdge.toId)}
+                        />
+                    </div>
+                )}
+
                 {currentAchievement && (
                     <AchievementPopup 
                         title={currentAchievement.title} 
@@ -1820,6 +1882,29 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                         visible={!!currentAchievement} 
                         onClose={onCloseAchievement} 
                     />
+                )}
+
+                {/* ALCHEMY FORGE MODAL */}
+                {showAlchemyForge && (
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+                        <div className="w-full h-full max-w-6xl relative">
+                            <Alchemy 
+                                onAddNode={(node) => {
+                                    setNodes(prev => [...prev, node]);
+                                    setShowAlchemyForge(false);
+                                }}
+                                onAddNodesAndCluster={handleNewNodesAndClusterFromAlchemy}
+                                onClose={() => setShowAlchemyForge(false)}
+                                intent={alchemyIntent}
+                                onBack={() => setShowAlchemyForge(false)}
+                                onGoToGraph={() => setShowAlchemyForge(false)}
+                                onShowAbout={onShowAbout}
+                                onLogout={onLogout}
+                                onShowAccount={onShowAccount}
+                                onShowFAQ={onShowFAQ}
+                            />
+                        </div>
+                    </div>
                 )}
             </div>
         </GraphShell>

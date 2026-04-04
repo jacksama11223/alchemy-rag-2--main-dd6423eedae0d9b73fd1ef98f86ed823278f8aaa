@@ -100,6 +100,7 @@ export interface AlchemyProps {
     onShowAccount: () => void;
     onAddNode: (node: KnowledgeNode) => void;
     onAddNodes?: (nodes: KnowledgeNode[]) => void;
+    onAddNodesAndCluster?: (nodes: KnowledgeNode[], cluster: any) => void;
     onGoToGraph: () => void;
     initialPrompt?: string;
     userNodes?: KnowledgeNode[];
@@ -110,13 +111,16 @@ export interface AlchemyProps {
     onGoToBattle?: () => void;
     onToggleTodo?: () => void;
     onNavigateToFeature?: (feature: string, params?: any) => void; 
+    onClose?: () => void;
 }
 
 const Alchemy: React.FC<AlchemyProps> = ({ 
     onBack, onShowAbout, onLogout, onShowAccount, 
-    onAddNode, onAddNodes, onGoToGraph, userNodes = [], 
-    onUpdateNode, onNavigateToDistill, intent, onGoToFeatures, onGoToBattle, onToggleTodo, onNavigateToFeature
+    onAddNode, onAddNodes, onAddNodesAndCluster, onGoToGraph, userNodes = [], 
+    onUpdateNode, onNavigateToDistill, intent, onGoToFeatures, onGoToBattle, onToggleTodo, onNavigateToFeature, onClose
 }) => {
+    
+    const handleClose = onClose || onBack;
     
     // --- STATE MANAGEMENT ---
     const [sources, setSources] = useState<AlchemySource[]>([]);
@@ -655,8 +659,10 @@ const Alchemy: React.FC<AlchemyProps> = ({
                     }))
                 });
                 
-                // Add all nodes to graph
-                if (onAddNodes) {
+                // Add all nodes and cluster (The "Khoanh vùng" magic)
+                if (data.cluster && onAddNodesAndCluster) {
+                    onAddNodesAndCluster(data.nodes, data.cluster);
+                } else if (onAddNodes) {
                     onAddNodes(data.nodes);
                 } else {
                     data.nodes.forEach((n: any) => onAddNode(n));

@@ -9,7 +9,8 @@ const clusterSchema = mongoose.Schema({
   centroid: {
     x: { type: Number },
     y: { type: Number }
-  }
+  },
+  createdID: { type: String }
 }, {
   timestamps: true,
 });

@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import { KnowledgeNode, SavedDrawing, AlchemyIntent, Quest, TodoTask, UserAccount, AdminUserFlow } from '../types';
+import { KnowledgeNode, SavedDrawing, AlchemyIntent, Quest, TodoTask, UserAccount, AdminUserFlow, UserCluster, InteractionMode } from '../types';
 import { logoutUser } from '../services/mockBackend';
 import { socketService } from '../services/socketService';
 
 interface AppState {
   view: string;
+  interactionMode: InteractionMode;
   isLoginModalOpen: boolean;
   isLoggedIn: boolean;
   isFriendManagerOpen: boolean;
@@ -16,6 +17,7 @@ interface AppState {
   flowStepIndex: number;
   scrollToFeatures: boolean;
   userNodes: KnowledgeNode[];
+  userClusters: UserCluster[];
   hasLoadedNodes: boolean;
   selectedNode: KnowledgeNode | null;
   activeTagFilter: string | null;
@@ -36,6 +38,7 @@ interface AppState {
 
   // Actions
   setView: (view: string) => void;
+  setInteractionMode: (mode: InteractionMode) => void;
   setIsLoginModalOpen: (isOpen: boolean) => void;
   setIsLoggedIn: (isLoggedIn: boolean) => void;
   setIsFriendManagerOpen: (isOpen: boolean) => void;
@@ -47,6 +50,7 @@ interface AppState {
   setFlowStepIndex: (index: number) => void;
   setScrollToFeatures: (scroll: boolean) => void;
   setUserNodes: (nodes: KnowledgeNode[] | ((prev: KnowledgeNode[]) => KnowledgeNode[])) => void;
+  setUserClusters: (clusters: UserCluster[] | ((prev: UserCluster[]) => UserCluster[])) => void;
   setHasLoadedNodes: (loaded: boolean) => void;
   setSelectedNode: (node: KnowledgeNode | null) => void;
   setActiveTagFilter: (filter: string | null) => void;
@@ -77,6 +81,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   view: 'landing',
+  interactionMode: 'none',
   isLoginModalOpen: false,
   isLoggedIn: false,
   isFriendManagerOpen: false,
@@ -88,6 +93,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   flowStepIndex: 0,
   scrollToFeatures: false,
   userNodes: [],
+  userClusters: [],
   hasLoadedNodes: false,
   selectedNode: null,
   activeTagFilter: null,
@@ -107,6 +113,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isOnboardingTourRun: false,
 
   setView: (view) => set({ view }),
+  setInteractionMode: (interactionMode) => set({ interactionMode }),
   setIsLoginModalOpen: (isLoginModalOpen) => set({ isLoginModalOpen }),
   setIsLoggedIn: (isLoggedIn) => set({ isLoggedIn }),
   setIsFriendManagerOpen: (isFriendManagerOpen) => set({ isFriendManagerOpen }),
@@ -118,6 +125,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setFlowStepIndex: (flowStepIndex) => set({ flowStepIndex }),
   setScrollToFeatures: (scrollToFeatures) => set({ scrollToFeatures }),
   setUserNodes: (nodes) => set((state) => ({ userNodes: typeof nodes === 'function' ? (nodes as any)(state.userNodes) : nodes })),
+  setUserClusters: (clusters) => set((state) => ({ userClusters: typeof clusters === 'function' ? (clusters as any)(state.userClusters) : clusters })),
   setHasLoadedNodes: (hasLoadedNodes) => set({ hasLoadedNodes }),
   setSelectedNode: (selectedNode) => set({ selectedNode }),
   setActiveTagFilter: (activeTagFilter) => set({ activeTagFilter }),
@@ -208,7 +216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   handleLogout: () => {
     logoutUser();
     socketService.disconnect();
-    set({ isLoggedIn: false, view: 'landing', userNodes: [], tasks: [], quests: [], learningQueue: [], impersonatingUser: null, adminSession: null, activeAdminFlow: null });
+    set({ isLoggedIn: false, view: 'landing', userNodes: [], userClusters: [], tasks: [], quests: [], learningQueue: [], impersonatingUser: null, adminSession: null, activeAdminFlow: null });
     localStorage.removeItem('learnai_session');
     localStorage.removeItem('learnai_todos');
     window.scrollTo({ top: 0, behavior: 'smooth' }); 

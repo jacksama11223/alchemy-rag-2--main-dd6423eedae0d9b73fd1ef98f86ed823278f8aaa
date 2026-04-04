@@ -5,6 +5,9 @@ import { calculateItemSM2, getPredictedInterval } from '../services/sm2Service';
 import { gradeUserAnswer } from '../services/geminiService';
 import { useGamification } from '../contexts/GamificationContext';
 import { reviewNodeItemInBackend } from '../services/mockBackend';
+import { LearningSideToolbar } from './LearningSideToolbar';
+import { useAppStore } from '../store/useAppStore';
+import { InteractionMode } from '../types';
 
 interface LearningModalProps {
     node: KnowledgeNode;
@@ -311,7 +314,13 @@ export const LearningModal: React.FC<LearningModalProps> = ({
     const { isRankedMode, updateRank } = useGamification();
 
     // --- STATE MANAGEMENT ---
+    const { interactionMode: activeMode, setInteractionMode: setActiveMode } = useAppStore();
     
+    // Reset interaction mode on unmount
+    useEffect(() => {
+        return () => setActiveMode('none');
+    }, [setActiveMode]);
+
     // Flatten all due items into a single queue
     const sessionQueue = useMemo<SessionItem[]>(() => {
         if (!node.data) return [];
@@ -556,10 +565,15 @@ export const LearningModal: React.FC<LearningModalProps> = ({
     const progressPercent = ((currentQueueIndex + 1) / (sessionQueue.length || 1)) * 100;
 
     return (
-        <div className={`fixed inset-0 z-[150] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 md:p-8 animate-fade-in font-display pointer-events-auto ${isShake ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
+        <div className={`fixed inset-0 z-[150] transition-all duration-700 ${activeMode === 'none' ? 'bg-black/95 backdrop-blur-xl' : 'bg-black/40 backdrop-blur-none'} flex flex-col items-center justify-center p-4 md:p-8 animate-fade-in font-display pointer-events-none ${isShake ? 'animate-[shake_0.5s_ease-in-out]' : ''}`}>
+            
+            <div className="pointer-events-auto">
+                <LearningSideToolbar activeMode={activeMode} onModeChange={setActiveMode} />
+            </div>
+
             {/* Header / Context Bar */}
-            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
-                <div className="flex flex-col gap-1 pointer-events-auto">
+            <div className={`absolute top-0 left-0 w-full p-6 flex justify-between items-start transition-all duration-500 ${activeMode !== 'none' ? 'opacity-0 -translate-y-10' : 'opacity-100 translate-y-0 pointer-events-auto'}`}>
+                <div className="flex flex-col gap-1">
                     {/* G-Learning Breadcrumb */}
                     {parentNodeTitle && (
                         <div className="flex items-center gap-2 text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">
@@ -611,7 +625,7 @@ export const LearningModal: React.FC<LearningModalProps> = ({
             </div>
 
             {/* Main Content Area */}
-            <div className="w-full max-w-5xl flex flex-col items-center mt-12">
+            <div className={`w-full max-w-5xl flex flex-col items-center mt-12 transition-all duration-500 ${activeMode !== 'none' ? 'opacity-20 scale-90 blur-sm translate-x-32' : 'opacity-100 scale-100 pointer-events-auto'}`}>
                 {/* Progress Indicators */}
                 <div className="w-full mb-8 space-y-3">
                     <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 px-2">

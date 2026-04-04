@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const RAGService = require('../services/RAGService');
 const AIOrchestrator = require('../services/aiOrchestrator');
 const Node = require('../models/Node');
+const Cluster = require('../models/Cluster');
 const KnowledgeIndex = require('../models/KnowledgeIndex');
 const VectorStore = require('../models/VectorStore');
 const { parseQueryKeywords } = require('../utils/keywordExtractor');
@@ -125,6 +126,7 @@ const generateRoadmapFromRag = asyncHandler(async (req, res) => {
     
     const createdNodes = [];
     let previousNodeId = null;
+    const batchId = `roadmap-${Date.now()}`; // Unique ID for this generation batch
 
     // We process sequentially to ensure linking
     for (let i = 0; i < strategy.stages.length; i++) {
@@ -182,7 +184,8 @@ const generateRoadmapFromRag = asyncHandler(async (req, res) => {
             title: `${i + 1}. ${stage.title}`,
             type: 'Flashcard',
             status: 'new',
-            tags: ['Roadmap', strategy.roadmapTitle, ...stage.concepts],
+            tags: ['Roadmap', strategy.roadmapTitle, batchId, ...stage.concepts],
+            createdID: batchId, // New field for batch grouping
             x: startX + xOffset,
             y: startY + yOffset,
             data: {
@@ -197,11 +200,23 @@ const generateRoadmapFromRag = asyncHandler(async (req, res) => {
 
         const savedNode = await newNode.save();
         
-        // Link to previous node (Mutual connection)
+        // Link to previous node using both legacy and NEW structured connections
         if (previousNodeId) {
+            // Update previous node to point to this new node with an ARROW
             await Node.findByIdAndUpdate(previousNodeId, { 
-                $addToSet: { connectedNodeIds: savedNode._id.toString() } 
+                $addToSet: { 
+                    connectedNodeIds: savedNode._id.toString(),
+                    connections: { 
+                        targetId: savedNode._id.toString(),
+                        label: "Tiếp theo",
+                        style: "solid",
+                        hasArrow: true,
+                        color: "#22d3ee"
+                    }
+                } 
             });
+            
+            // Backward link (legacy)
             savedNode.connectedNodeIds.push(previousNodeId.toString());
             await savedNode.save();
         }
@@ -209,11 +224,22 @@ const generateRoadmapFromRag = asyncHandler(async (req, res) => {
         createdNodes.push(savedNode);
         previousNodeId = savedNode._id;
     }
+    
+    // 4. AUTO-CLUSTER ROADMAP NODES (Vùng tri thức)
+    let finalCluster = null;
+    try {
+        const clusteringService = require('../services/clusteringService');
+        finalCluster = await clusteringService.createBatchCluster(userId, batchId, strategy.roadmapTitle);
+        console.log(`[RoadmapForge] Cluster established: ${strategy.roadmapTitle} with ID: ${batchId}`);
+    } catch (e) {
+        console.warn(`[RoadmapForge] Failed to create roadmap cluster:`, e);
+    }
 
     res.status(201).json({
         message: 'Roadmap generated successfully',
         roadmapTitle: strategy.roadmapTitle,
-        nodes: createdNodes
+        nodes: createdNodes,
+        cluster: finalCluster // Returning the cluster for immediate frontend update
     });
 });
 

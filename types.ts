@@ -39,6 +39,8 @@ declare global {
   }
 }
 
+export type InteractionMode = 'none' | 'linking' | 'clustering' | 'expanding';
+
 export interface KnowledgeNode {
     id: string;
     title: string;
@@ -505,6 +507,8 @@ export interface UserCluster {
     color: string;
     nodeIds: string[]; 
     centroid?: { x: number, y: number };
+    bounds?: { minX: number, minY: number, maxX: number, maxY: number, radius?: number };
+    createdID?: string;
 }
 
 export type StorageSourceType = 'note' | 'ocr' | 'voice' | 'web' | 'upload' | 'youtube' | 'unified' | 'drive';

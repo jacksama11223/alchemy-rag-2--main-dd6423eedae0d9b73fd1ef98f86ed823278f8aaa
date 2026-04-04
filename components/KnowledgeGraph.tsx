@@ -1,6 +1,8 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { KnowledgeNode, AlchemyIntent, Quest, NodeShape, UserCluster } from '../types';
+import { KnowledgeNode, AlchemyIntent, Quest, NodeShape, UserCluster, InteractionMode } from '../types';
+import { LearningSideToolbar } from './LearningSideToolbar';
+import { useAppStore } from '../store/useAppStore';
 import { calculateNodeMastery } from '../services/sm2Service';
 import { useGamification } from '../contexts/GamificationContext';
 import { GuideTrigger } from './GuideSystem';
@@ -111,6 +113,7 @@ interface ExploreGraphProps {
     intent?: any; 
     onClearIntent?: () => void; 
     onUpdateGraph?: (nodes: KnowledgeNode[]) => void;
+    userClusters?: UserCluster[];
     // Special prop for KnowledgeGraph variant in App.tsx
     onExplore?: () => void;
     onDeleteNode?: (node: KnowledgeNode) => void;
@@ -156,7 +159,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     activeFilter, onClearFilter, focusedNodeId, onNavigateToAlchemy, onNavigateToFeature,
     quests = [], userXP = 0, userLevel = 1, currentAchievement, onClaimReward, onCloseAchievement,
     onGainXP, onRegisterQuest, onAddTask, onGoToFeatures, onToggleTodo, intent, onClearIntent, onUpdateGraph,
-    onMergeNodes, onStartPlaylist, onExplore, onDeleteNode
+    onMergeNodes, onStartPlaylist, onExplore, onDeleteNode, userClusters: sharedClusters
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -220,8 +223,44 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     const [showTemplates, setShowTemplates] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const { isRankedMode, toggleRankedMode } = useGamification();
+    const { interactionMode, setInteractionMode } = useAppStore();
 
-    useEffect(() => { const loadClusters = async () => { const data = await getClustersFromBackend(); setUserClusters(data); }; loadClusters(); }, []);
+    // Sync Global Interaction Mode
+    useEffect(() => {
+        if (interactionMode === 'linking') {
+            setIsLinkingMode(true);
+            setZoneToolActive(false);
+        } else if (interactionMode === 'clustering') {
+            setIsLinkingMode(false);
+            setZoneToolActive(true);
+        } else if (interactionMode === 'expanding') {
+            setIsLinkingMode(false);
+            setZoneToolActive(false);
+            if (selectedNodeIds.size === 1) {
+                const nodeId = Array.from(selectedNodeIds)[0];
+                const node = nodesRef.current.find(n => n.id === nodeId);
+                if (node) {
+                    setExpandingNode(node);
+                    setShowExpandModal(true);
+                }
+            }
+        } else {
+            setIsLinkingMode(false);
+            setZoneToolActive(false);
+        }
+    }, [interactionMode, selectedNodeIds]);
+
+    useEffect(() => { 
+        if (sharedClusters) {
+            setUserClusters(sharedClusters);
+            return;
+        }
+        const loadClusters = async () => { 
+            const data = await getClustersFromBackend(); 
+            setUserClusters(data); 
+        }; 
+        loadClusters(); 
+    }, [sharedClusters]);
     useEffect(() => { clustersRef.current = userClusters; }, [userClusters]);
 
     const handleExit = () => { if (onUpdateGraph) onUpdateGraph(nodesRef.current); onBack(); };
@@ -1357,6 +1396,14 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                                 <span className="material-symbols-outlined text-sky-200 mr-3 group-hover:text-white">search</span>
                                 <span className="text-sky-100/70 font-medium group-hover:text-white">Tra cứu dữ liệu trong mạng lưới...</span>
                             </div>
+                            
+                            {/* MAIN GRAPH TOOLBAR (FIXED ON LEFT) */}
+                            <LearningSideToolbar 
+                                activeMode={interactionMode} 
+                                onModeChange={setInteractionMode}
+                                className="fixed left-6 top-1/2 -translate-y-1/2" 
+                            />
+
                             <VoiceCommandListener />
                         </div>
                      )}
