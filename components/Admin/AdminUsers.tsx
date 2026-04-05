@@ -103,7 +103,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onImpersonate }) => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 font-mono text-xs">{user.email}</td>
-                                    <td className="px-6 py-4 text-slate-400">{new Date(user.joinedDate).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 text-slate-400">{new Date(user.joinedDate || (user as any).createdAt || (user as any).timestamp || Date.now()).toLocaleDateString()}</td>
                                     <td className="px-6 py-4">
                                         {user.isBanned ? (
                                             <span className="bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-xs font-bold border border-red-500/30 flex items-center gap-1 w-fit">

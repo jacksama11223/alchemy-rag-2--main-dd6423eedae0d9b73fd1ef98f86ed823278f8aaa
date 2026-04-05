@@ -148,7 +148,8 @@ const authUser = async (req, res) => {
         lastCheckIn: user.lastCheckIn,
         lp: user.lp,
         rankTier: user.rankTier,
-        notifications: user.notifications
+        notifications: user.notifications,
+        joinedDate: user.createdAt
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password' });

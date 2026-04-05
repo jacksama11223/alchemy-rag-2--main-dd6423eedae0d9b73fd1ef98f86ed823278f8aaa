@@ -112,9 +112,14 @@ function App() {
 
   const hasLoadedNodes = React.useRef(false);
   
+  const { windows } = useMultiTaskStore();
+  const hasLeftSplit = windows.some(w => w.isSplit === 'left' && !w.isMinimized);
+  const hasRightSplit = windows.some(w => w.isSplit === 'right' && !w.isMinimized);
+  const hasTopSplit = windows.some(w => w.isSplit === 'top' && !w.isMinimized);
+  const hasBottomSplit = windows.some(w => w.isSplit === 'bottom' && !w.isMinimized);
+
   const { progress, addXP, rankProfile } = useGamification();
   const { logAction } = useBehavior();
-  
   const stats = useMemo(() => getGlobalStats(userNodes), [userNodes]);
 
   const currentDebugState = {
@@ -595,12 +600,6 @@ function App() {
           </>
       );
   }
-
-  const { windows } = useMultiTaskStore();
-  const hasLeftSplit = windows.some(w => w.isSplit === 'left' && !w.isMinimized);
-  const hasRightSplit = windows.some(w => w.isSplit === 'right' && !w.isMinimized);
-  const hasTopSplit = windows.some(w => w.isSplit === 'top' && !w.isMinimized);
-  const hasBottomSplit = windows.some(w => w.isSplit === 'bottom' && !w.isMinimized);
 
   const mainStyle: React.CSSProperties = {
     marginLeft: hasLeftSplit ? '50%' : 0,

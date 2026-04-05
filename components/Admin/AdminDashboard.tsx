@@ -16,26 +16,41 @@ export const AdminDashboard: React.FC = () => {
         const fetchRealData = async () => {
             const users = await getAllUsers();
             const data = await getRealAnalyticsDashboardData();
+
             if (isMounted) {
-                setTotalUsers(users.length);
+                setTotalUsers(users?.length || 0);
                 
                 if (Array.isArray(data)) {
-                    const transformedStats: AnalyticsData = {
-                        dailyActiveUsers: data.map((d: any) => d.dailyActiveUsers || 0).reverse().slice(-7),
-                        newSignups: data.map((d: any) => d.newSignups || 0).reverse().slice(-7),
-                        aiTokensConsumed: data.map((d: any) => d.aiTokensConsumed || 0).reverse().slice(-7),
-                        featureUsage: data[0]?.featureUsage || [],
-                        retentionRate: data[0]?.retentionRate || 0
-                    };
-                    
-                    while (transformedStats.dailyActiveUsers.length < 7) transformedStats.dailyActiveUsers.unshift(0);
-                    while (transformedStats.newSignups.length < 7) transformedStats.newSignups.unshift(0);
-                    while (transformedStats.aiTokensConsumed.length < 7) transformedStats.aiTokensConsumed.unshift(0);
-                    
-                    setStats(transformedStats);
-                } else if (data) {
-                    setStats(data as AnalyticsData);
+                    if (data.length > 0) {
+                        const validData = data.filter(d => d);
+                        const transformedStats: AnalyticsData = {
+                            dailyActiveUsers: validData.map((d: any) => d.dailyActiveUsers || 0).reverse().slice(-7),
+                            newSignups: validData.map((d: any) => d.newSignups || 0).reverse().slice(-7),
+                            aiTokensConsumed: validData.map((d: any) => d.aiTokensConsumed || 0).reverse().slice(-7),
+                            featureUsage: validData[0]?.featureUsage || [],
+                            retentionRate: validData[0]?.retentionRate || 0
+                        };
+                        
+                        while (transformedStats.dailyActiveUsers.length < 7) transformedStats.dailyActiveUsers.unshift(0);
+                        while (transformedStats.newSignups.length < 7) transformedStats.newSignups.unshift(0);
+                        while (transformedStats.aiTokensConsumed.length < 7) transformedStats.aiTokensConsumed.unshift(0);
+                        
+                        setStats(transformedStats);
+                    } else {
+                        // Empty array fallback
+                        setStats({
+                            dailyActiveUsers: [0,0,0,0,0,0,0],
+                            newSignups: [0,0,0,0,0,0,0],
+                            aiTokensConsumed: [0,0,0,0,0,0,0],
+                            featureUsage: [],
+                            retentionRate: 0
+                        });
+                    }
+                } else if (data && typeof data === 'object') {
+                    // Single object fallback
+                    setStats(data as any as AnalyticsData);
                 } else {
+                    // Null/Undefined fallback
                     setStats({
                         dailyActiveUsers: [0,0,0,0,0,0,0],
                         newSignups: [0,0,0,0,0,0,0],
@@ -139,7 +154,7 @@ export const AdminDashboard: React.FC = () => {
                             <div key={i} className="flex flex-col gap-1">
                                 <div className="flex justify-between text-xs text-slate-300">
                                     <span>{feature.name}</span>
-                                    <span className="font-bold">{feature.count} uses</span>
+                                    <span className="font-bold">{(feature.count || 0).toLocaleString()} uses</span>
                                 </div>
                                 <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
                                     <div 
