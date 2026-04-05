@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { DriveFile, DriveFileType, AlchemyIntent } from '../types';
@@ -18,59 +19,77 @@ interface DriveStorageProps {
     onToggleTodo?: () => void;
 }
 
-// --- FILE PREVIEW MODAL ---
 interface FilePreviewModalProps {
     file: DriveFile | null;
     onClose: () => void;
     onExtractText: (text: string) => void;
+    onSaveSuccess: (updatedFile: DriveFile) => void;
 }
 
-const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ file, onClose, onExtractText }) => {
+const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ file, onClose, onExtractText, onSaveSuccess }) => {
     const [selectedText, setSelectedText] = useState('');
     const [selectionPos, setSelectionPos] = useState({ x: 0, y: 0 });
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedContent, setEditedContent] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
 
-    // UPDATED: Content Generator to prioritize REAL content
+    useEffect(() => {
+        if (file) {
+            setEditedContent(file.content || "");
+            setIsEditing(false); // Reset editing mode when file changes
+        }
+    }, [file]);
+
+    const handleSave = async () => {
+        if (!file) return;
+        setIsSaving(true);
+        try {
+            const sessionStr = window.localStorage.getItem('learnai_session');
+            let token = '';
+            if (sessionStr) {
+                const session = JSON.parse(sessionStr);
+                token = session.token || '';
+            }
+
+            const res = await fetch(`/api/files/${file.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ content: editedContent })
+            });
+
+            if (!res.ok) throw new Error('Failed to save file contents');
+            const updatedFile = await res.json();
+            onSaveSuccess(updatedFile);
+            setIsEditing(false);
+            alert("File saved successfully!");
+        } catch (err) {
+            console.error("Error saving file:", err);
+            alert("Lỗi khi lưu file.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const getContent = () => {
         if (!file) return "";
-        
-        // If file has real content (not the default mock string), use it
-        // We check against the default mock pattern just in case old data exists
         if (file.content && !file.content.includes('(Mocked)')) {
             return file.content;
         }
-
         if (file.type === 'image') return "Image Preview Not Supported for Text Selection.";
-        
-        // Fallback Mock for demo files without real content
-        return `
-            [${file.name.toUpperCase()} - DEMO CONTENT VIEW]
-
-            CHAPTER 1: INTRODUCTION TO LEARNAI
-            
-            LearnAI is designed to revolutionize personal knowledge management. It combines Graph Theory, Spaced Repetition, and Generative AI.
-            
-            Key Concept 1: The Knowledge Graph
-            Instead of linear lists, knowledge is stored as nodes connected by edges. This mimics the neural structure of the human brain.
-            
-            Key Concept 2: Spaced Repetition (SM-2)
-            The system schedules reviews based on the forgetting curve. Items you know well are pushed to the future; items you struggle with appear sooner.
-            
-            CHAPTER 2: ADVANCED TECHNIQUES
-            
-            Micro-learning is the process of breaking down complex topics into small, digestible chunks.
-            
-            (Select any text above to create a flashcard instantly!)
-        `;
+        return `[${file.name.toUpperCase()} - DEMO CONTENT]\n\n# Chapter 1: Introduction\n\n**LearnAI** is a powerful tool.`; 
     };
 
     const handleMouseUp = () => {
+        if (isEditing) return; // Disable extraction in edit mode
         const selection = window.getSelection();
         if (selection && selection.toString().trim().length > 0) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
             setSelectedText(selection.toString());
-            // Position tooltip above selection
             setSelectionPos({ x: rect.left + rect.width / 2, y: rect.top - 50 });
         } else {
             setSelectedText('');
@@ -90,26 +109,76 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ file, onClose, onEx
                     <div className="flex items-center gap-3">
                         <span className="material-symbols-outlined text-slate-500">description</span>
                         <h3 className="font-bold text-lg">{file.name}</h3>
-                        {file.content && !file.content.includes('(Mocked)') && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200">Real Content</span>
-                        )}
+                        {isEditing && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-bold">CHẾ ĐỘ CHỈNH SỬA</span>}
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-500">
-                        <span className="material-symbols-outlined">close</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {!isEditing ? (
+                            <button 
+                                onClick={() => setIsEditing(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-bold transition-all"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                                Chỉnh sửa
+                            </button>
+                        ) : (
+                            <>
+                                <button 
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white hover:bg-green-700 rounded-lg text-sm font-bold transition-all shadow-md"
+                                >
+                                    <span className="material-symbols-outlined text-[18px]">save</span>
+                                    {isSaving ? 'Đang lưu...' : 'Lưu lại'}
+                                </button>
+                                <button 
+                                    onClick={() => { setIsEditing(false); setEditedContent(file.content || ""); }}
+                                    className="px-3 py-1.5 bg-slate-200 text-slate-600 hover:bg-slate-300 rounded-lg text-sm font-bold transition-all"
+                                >
+                                    Hủy
+                                </button>
+                            </>
+                        )}
+                        <div className="w-px h-6 bg-slate-200 mx-2"></div>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-500">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
-                <div 
-                    className="flex-1 overflow-y-auto p-8 font-serif text-lg leading-relaxed whitespace-pre-wrap selection:bg-yellow-200 selection:text-black"
-                    onMouseUp={handleMouseUp}
-                    ref={contentRef}
-                >
-                    {getContent()}
+                <div className="flex-1 overflow-y-auto px-10 py-8 bg-[#fdfdfd]">
+                    {isEditing ? (
+                        <textarea
+                            value={editedContent}
+                            onChange={(e) => setEditedContent(e.target.value)}
+                            className="w-full h-full p-4 border border-blue-200 rounded-xl font-mono text-base leading-relaxed focus:outline-none focus:ring-4 focus:ring-blue-100 bg-white shadow-inner resize-none custom-scrollbar"
+                            placeholder="Nhập nội dung tài liệu..."
+                            autoFocus
+                        />
+                    ) : (
+                        <div 
+                            className="prose prose-slate max-w-none text-lg leading-relaxed selection:bg-yellow-200 selection:text-black font-serif"
+                            onMouseUp={handleMouseUp}
+                            ref={contentRef}
+                        >
+                            <style>{`
+                                .prose h1 { font-size: 2.25rem; font-weight: 900; color: #1e293b; margin-top: 2rem; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+                                .prose h2 { font-size: 1.75rem; font-weight: 800; color: #334155; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+                                .prose h3 { font-size: 1.5rem; font-weight: 700; color: #475569; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+                                .prose p { margin-bottom: 1.25rem; color: #334155; }
+                                .prose strong { color: #1e293b; font-weight: 700; }
+                                .prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1.25rem; }
+                                .prose li { margin-bottom: 0.5rem; }
+                                .prose code { background: #f1f5f9; padding: 0.2rem 0.4rem; rounded: 4px; font-family: monospace; color: #e11d48; }
+                                .prose blockquote { border-left: 4px solid #3b82f6; padding-left: 1.5rem; color: #64748b; font-style: italic; margin: 1.5rem 0; }
+                            `}</style>
+                            <ReactMarkdown>{editedContent || getContent()}</ReactMarkdown>
+                        </div>
+                    )}
                 </div>
                 
                 {/* Floating Action Button for Selection */}
-                {selectedText && (
+                {selectedText && !isEditing && (
                     <div 
                         className="fixed z-[160] transform -translate-x-1/2 animate-bounce-in"
                         style={{ left: selectionPos.x, top: selectionPos.y }}
@@ -461,6 +530,10 @@ export const DriveStorage: React.FC<DriveStorageProps> = ({ onBack, onShowAccoun
                 file={previewFile} 
                 onClose={() => setPreviewFile(null)} 
                 onExtractText={handleMicroLearning}
+                onSaveSuccess={(updatedFile) => {
+                    setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+                    setPreviewFile(updatedFile);
+                }}
             />
 
             <AuthoringModal 
