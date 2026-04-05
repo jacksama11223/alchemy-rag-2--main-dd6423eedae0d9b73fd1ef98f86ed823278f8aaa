@@ -1,5 +1,6 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { getCurrentUser, createFeedback } from '../services/mockBackend';
 
 interface ContactProps {
     onBack: () => void;
@@ -11,6 +12,59 @@ interface ContactProps {
 
 const Contact: React.FC<ContactProps> = ({ onBack, onLogout, onShowFAQ, onShowAccount, onGoToFeatures }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const user = getCurrentUser();
+
+    const [formData, setFormData] = useState({
+        name: user?.name || '',
+        email: user?.email || '',
+        message: '',
+        type: 'General',
+        priority: 'Medium'
+    });
+    const [submitting, setSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [errorMessage, setErrorMessage] = useState('');
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { id, value } = e.target;
+        setFormData(prev => ({ ...prev, [id]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!formData.message.trim()) {
+            setErrorMessage('Vui lòng nhập nội dung thông điệp.');
+            return;
+        }
+
+        setSubmitting(true);
+        setSubmitStatus('idle');
+        setErrorMessage('');
+
+        try {
+            const result = await createFeedback({
+                type: formData.type,
+                priority: formData.priority,
+                content: formData.message,
+                // userId is handled by the backend from the token, 
+                // but we can send names/emails for display if needed
+            });
+
+            if (result) {
+                setSubmitStatus('success');
+                setFormData(prev => ({ ...prev, message: '' }));
+                setTimeout(() => setSubmitStatus('idle'), 5000);
+            } else {
+                setSubmitStatus('error');
+                setErrorMessage('Không thể gửi phản hồi. Vui lòng thử lại sau.');
+            }
+        } catch (error) {
+            setSubmitStatus('error');
+            setErrorMessage('Lỗi kết nối máy chủ.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -322,7 +376,36 @@ const Contact: React.FC<ContactProps> = ({ onBack, onLogout, onShowFAQ, onShowAc
                                     </div>
                                 </div>
                                 
-                                <form className="flex flex-col gap-5 bg-white/5 p-6 rounded-2xl border border-white/5 shadow-inner">
+                                <form onSubmit={handleSubmit} className="flex flex-col gap-5 bg-white/5 p-6 rounded-2xl border border-white/5 shadow-inner">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-2 block ml-1" htmlFor="type">Loại tín hiệu</label>
+                                            <select 
+                                                id="type"
+                                                className="w-full rounded-lg glass-input px-4 py-3 text-sm"
+                                                value={formData.type}
+                                                onChange={handleInputChange}
+                                            >
+                                                <option value="General" className="bg-[#0f172a]">Góp ý chung</option>
+                                                <option value="Bug" className="bg-[#0f172a]">Báo lỗi (Bug)</option>
+                                                <option value="Feature" className="bg-[#0f172a]">Yêu cầu tính năng</option>
+                                                <option value="Support" className="bg-[#0f172a]">Hỗ trợ kỹ thuật</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-2 block ml-1" htmlFor="priority">Mức độ khẩn cấp</label>
+                                            <select 
+                                                id="priority"
+                                                className="w-full rounded-lg glass-input px-4 py-3 text-sm"
+                                                value={formData.priority}
+                                                onChange={handleInputChange}
+                                            >
+                                                <option value="Low" className="bg-[#0f172a]">Thấp (Bình thường)</option>
+                                                <option value="Medium" className="bg-[#0f172a]">Trung bình</option>
+                                                <option value="High" className="bg-[#0f172a]">Cao (Khẩn cấp)</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                     <div>
                                         <label className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-2 block ml-1" htmlFor="name">Thuyền viên</label>
                                         <input 
@@ -330,6 +413,9 @@ const Contact: React.FC<ContactProps> = ({ onBack, onLogout, onShowFAQ, onShowAc
                                             id="name" 
                                             placeholder="Tên của bạn" 
                                             type="text"
+                                            value={formData.name}
+                                            onChange={handleInputChange}
+                                            disabled={!!user}
                                         />
                                     </div>
                                     <div>
@@ -339,6 +425,9 @@ const Contact: React.FC<ContactProps> = ({ onBack, onLogout, onShowFAQ, onShowAc
                                             id="email" 
                                             placeholder="Email của bạn" 
                                             type="email"
+                                            value={formData.email}
+                                            onChange={handleInputChange}
+                                            disabled={!!user}
                                         />
                                     </div>
                                     <div>
@@ -348,11 +437,35 @@ const Contact: React.FC<ContactProps> = ({ onBack, onLogout, onShowFAQ, onShowAc
                                             id="message" 
                                             placeholder="Nội dung tin nhắn..." 
                                             rows={4}
+                                            value={formData.message}
+                                            onChange={handleInputChange}
+                                            required
                                         ></textarea>
                                     </div>
-                                    <button className="group flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg h-12 px-6 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-base font-bold leading-normal tracking-[0.015em] shadow-lg transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.6)] hover:scale-[1.02] active:scale-95 border border-cyan-400/30">
-                                        <span className="material-symbols-outlined group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform duration-300">send</span>
-                                        <span className="truncate">Thả Trôi Tin Nhắn</span>
+
+                                    {submitStatus === 'success' && (
+                                        <div className="bg-green-500/20 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2 animate-bounce-in">
+                                            <span className="material-symbols-outlined">check_circle</span>
+                                            Tin nhắn đã được thả trôi thành công! Admin sẽ phản hồi sớm.
+                                        </div>
+                                    )}
+
+                                    {submitStatus === 'error' && (
+                                        <div className="bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2 animate-bounce-in">
+                                            <span className="material-symbols-outlined">error</span>
+                                            {errorMessage}
+                                        </div>
+                                    )}
+
+                                    <button 
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="group flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg h-12 px-6 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-base font-bold leading-normal tracking-[0.015em] shadow-lg transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.6)] hover:scale-[1.02] active:scale-95 border border-cyan-400/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className={`material-symbols-outlined group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform duration-300 ${submitting ? 'animate-spin' : ''}`}>
+                                            {submitting ? 'sync' : 'send'}
+                                        </span>
+                                        <span className="truncate">{submitting ? 'Đang gửi...' : 'Thả Trôi Tin Nhắn'}</span>
                                     </button>
                                 </form>
                             </div>

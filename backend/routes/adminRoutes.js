@@ -7,13 +7,15 @@ const {
   sendBroadcast,
   getAuditLogs, createAuditLog,
   getFeatureFlags, createFeatureFlag, updateFeatureFlag, deleteFeatureFlag,
-  getAdminUserFlows, createAdminUserFlow, updateAdminUserFlow, deleteAdminUserFlow
+  getAdminUserFlows, createAdminUserFlow, updateAdminUserFlow, deleteAdminUserFlow,
+  testEmail
 } = require('../controllers/adminController');
 
 router.route('/reports').get(protect, getReports).post(protect, createReport);
 router.route('/reports/:id').put(protect, updateReport);
 
-router.route('/feedbacks').get(protect, getFeedbacks).post(protect, createFeedback);
+router.route('/feedbacks').get(protect, getFeedbacks).post(createFeedback);
+router.get('/test-email', testEmail);
 router.route('/my-feedbacks').get(protect, getMyFeedbacks);
 router.route('/feedbacks/:id').put(protect, updateFeedback);
 

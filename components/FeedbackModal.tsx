@@ -5,15 +5,22 @@ import { FeedbackItem } from '../types';
 interface FeedbackModalProps {
     isOpen: boolean;
     onClose: () => void;
+    initialTab?: 'new' | 'history';
 }
 
-export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
+export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, initialTab = 'new' }) => {
     const [type, setType] = useState('Bug');
     const [priority, setPriority] = useState('Medium');
     const [content, setContent] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [myFeedbacks, setMyFeedbacks] = useState<FeedbackItem[]>([]);
-    const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
+    const [activeTab, setActiveTab] = useState<'new' | 'history'>(initialTab);
+
+    useEffect(() => {
+        if (isOpen && initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [isOpen, initialTab]);
 
     useEffect(() => {
         if (isOpen) {

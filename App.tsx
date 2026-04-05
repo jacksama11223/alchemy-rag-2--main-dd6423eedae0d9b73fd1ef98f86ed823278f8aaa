@@ -103,6 +103,8 @@ function App() {
     toggleTodoPanel
   } = useAppStore();
 
+  const [feedbackInitialTab, setFeedbackInitialTab] = React.useState<'new' | 'history'>('new');
+
   const { isSidebarOpen } = useLayoutStore();
 
   const user = getCurrentUser();
@@ -219,10 +221,13 @@ function App() {
 
           socket.on('feedback_updated', (data) => {
               setSystemNotification({ 
-                  title: 'Phản hồi đã được cập nhật', 
-                  message: `Trạng thái: ${data.status}\n${data.reply ? `Trả lời: ${data.reply}` : ''}` 
+                  title: '📢 Admin LearnAI đã phản hồi', 
+                  message: data.status === 'Resolved' 
+                    ? 'Yêu cầu của bạn đã được xử lý xong! Bấm vào đây để xem chi tiết nhé.' 
+                    : `Hệ thống vừa cập nhật trạng thái mới cho yêu cầu của bạn: ${data.status}.`
               });
-              setTimeout(() => setSystemNotification(null), 10000);
+              setFeedbackInitialTab('history');
+              setTimeout(() => setSystemNotification(null), 15000); // Give users more time to see it
           });
 
           return () => {
@@ -688,15 +693,33 @@ function App() {
   return (
     <div className={`flex flex-col min-h-screen font-display ${showGlobalNav ? 'bg-[#F8F9FA] dark:bg-[#101c22]' : ''}`}>
       {systemNotification && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] bg-blue-900 border border-blue-500 text-white px-6 py-4 rounded-2xl shadow-2xl shadow-blue-500/20 flex items-start gap-4 animate-bounce-in max-w-md w-full">
-              <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-blue-400">campaign</span>
+          <div 
+            onClick={() => {
+                if (systemNotification.title.includes('Admin LearnAI')) {
+                    setFeedbackInitialTab('history');
+                    setIsFeedbackModalOpen(true);
+                    setSystemNotification(null);
+                }
+            }}
+            className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-br ${systemNotification.title.includes('Admin') ? 'from-cyan-900 to-blue-900 border-cyan-500 hover:scale-105 active:scale-95 cursor-pointer hover:shadow-cyan-500/30' : 'from-blue-900 to-indigo-900 border-blue-500'} border text-white px-6 py-4 rounded-2xl shadow-2xl flex items-start gap-4 animate-bounce-in max-w-md w-full transition-all duration-300`}
+          >
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${systemNotification.title.includes('Admin') ? 'bg-cyan-500/20' : 'bg-blue-500/20'}`}>
+                  <span className={`material-symbols-outlined ${systemNotification.title.includes('Admin') ? 'text-cyan-400' : 'text-blue-400'} ${systemNotification.title.includes('Admin') ? 'animate-pulse' : ''}`}>
+                    {systemNotification.title.includes('Admin') ? 'verified_user' : 'campaign'}
+                  </span>
               </div>
               <div className="flex-1">
                   <h4 className="font-bold text-lg mb-1">{systemNotification.title}</h4>
                   <p className="text-sm text-blue-100 whitespace-pre-wrap">{systemNotification.message}</p>
+                  {systemNotification.title.includes('Admin') && (
+                      <p className="text-[10px] text-cyan-300 mt-2 font-bold uppercase tracking-wider">Nhấn để xem chi tiết</p>
+                  )}
               </div>
-              <button onClick={() => setSystemNotification(null)} className="text-blue-400 hover:text-white transition-colors">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setSystemNotification(null); }} 
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Hủy thông báo"
+              >
                   <span className="material-symbols-outlined">close</span>
               </button>
           </div>
@@ -749,7 +772,11 @@ function App() {
         onNavigate={handleTodoNavigate}
     />
       
-      <FeedbackModal isOpen={isFeedbackModalOpen} onClose={() => setIsFeedbackModalOpen(false)} />
+      <FeedbackModal 
+        isOpen={isFeedbackModalOpen} 
+        onClose={() => setIsFeedbackModalOpen(false)} 
+        initialTab={feedbackInitialTab}
+      />
 
       {isLoggedIn && !impersonatingUser && view !== 'admin' && (
           <button 
