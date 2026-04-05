@@ -6,7 +6,11 @@ const STORAGE_KEY_API = 'custom_gemini_api_key';
 const STORAGE_KEY_BACKEND = 'backend_base_url';
 
 // Default backend URL - user changes this in Settings
-const DEFAULT_BACKEND_URL = 'http://192.168.1.100:5000';
+// On Web, localhost:5000 is usually the right default for development. 
+// On Mobile, we provide a placeholder that the user should update.
+const DEFAULT_BACKEND_URL = Platform.OS === 'web' 
+  ? 'http://localhost:5000' 
+  : 'http://192.168.1.100:5000';
 
 export const ApiKeyContext = createContext({
   apiKey: '',

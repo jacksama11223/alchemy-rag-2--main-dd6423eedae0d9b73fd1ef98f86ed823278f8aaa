@@ -15,12 +15,22 @@ import { auth } from '../firebase';
 
 const STORAGE_KEY_API = 'custom_gemini_api_key';
 const STORAGE_KEY_BACKEND = 'backend_base_url';
-const FALLBACK_BACKEND = 'http://192.168.1.100:5000';
+// Use Platform detection for a smarter fallback if storage is empty
+const FALLBACK_BACKEND = 'http://192.168.1.100:5000'; 
+const WEB_FALLBACK = 'http://localhost:5000';
 
 const getBaseUrl = async () => {
   try {
     const url = await AsyncStorage.getItem(STORAGE_KEY_BACKEND);
-    return url || FALLBACK_BACKEND;
+    if (url) return url;
+    
+    // Smarter fallback for web environments
+    if (typeof window !== 'undefined' && window.location) {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return WEB_FALLBACK;
+        }
+    }
+    return FALLBACK_BACKEND;
   } catch {
     return FALLBACK_BACKEND;
   }
@@ -71,7 +81,12 @@ export const apiGet = async (path, timeout = 15000) => {
     if (err.name === 'AbortError') {
       return { success: false, error: 'Request timeout. Kiểm tra backend đang chạy không?' };
     }
-    return { success: false, error: err.message };
+    
+    let msg = err.message;
+    if (msg === 'Network request failed' || msg.includes('Failed to fetch')) {
+        msg = '❌ Lỗi kết nối Backend. Hãy vào Cài đặt để cập nhật IP máy tính của bạn (ipconfig). Đảm bảo điện thoại và PC dùng cùng WiFi.';
+    }
+    return { success: false, error: msg };
   }
 };
 
@@ -100,7 +115,12 @@ export const apiPost = async (path, body, timeout = 30000) => {
     if (err.name === 'AbortError') {
       return { success: false, error: 'Request timeout. Kiểm tra backend đang chạy không?' };
     }
-    return { success: false, error: err.message };
+    
+    let msg = err.message;
+    if (msg === 'Network request failed' || msg.includes('Failed to fetch')) {
+        msg = '❌ Lỗi kết nối Backend. Hãy vào Cài đặt để cập nhật IP máy tính của bạn (ipconfig). Đảm bảo điện thoại và PC dùng cùng WiFi.';
+    }
+    return { success: false, error: msg };
   }
 };
 

@@ -21,6 +21,10 @@ import GlassCard from '../components/ui/GlassCard';
 
 const { width } = Dimensions.get('window');
 
+// ─── Tab Bar Height Adjustment ────────────────────────────────────────────────
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 86 : 68;
+const WEB_SAFE_BOTTOM = Platform.OS === 'web' ? 24 : 0;
+
 // ─── Stable session ID per user ───────────────────────────────────────────────
 const getSessionId = async (uid) => {
   const key = `chat_session_${uid}`;
@@ -549,8 +553,19 @@ const styles = StyleSheet.create({
   quickPromptText: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
 
   // Input bar
-  inputBarWrapper: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingHorizontal: 16, paddingVertical: 12, paddingBottom: Platform.OS === 'ios' ? 28 : 14 },
+  inputBarWrapper: { 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(255,255,255,0.05)',
+    paddingBottom: Platform.OS === 'web' ? TAB_BAR_HEIGHT + WEB_SAFE_BOTTOM : 0 
+  },
+  inputBar: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-end', 
+    gap: 10, 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    paddingBottom: Platform.OS === 'ios' ? 28 : (Platform.OS === 'web' ? 14 : TAB_BAR_HEIGHT + 14) 
+  },
   input: {
     flex: 1,
     backgroundColor: 'rgba(30,41,59,0.9)',
