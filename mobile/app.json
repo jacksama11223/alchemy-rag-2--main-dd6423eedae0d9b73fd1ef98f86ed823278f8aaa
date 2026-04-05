@@ -11,6 +11,10 @@
     },
     "android": {
       "package": "com.learnai.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
     }
   }
 }

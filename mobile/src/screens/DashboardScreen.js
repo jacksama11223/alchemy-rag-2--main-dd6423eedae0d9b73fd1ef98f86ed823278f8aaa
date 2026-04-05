@@ -13,7 +13,8 @@ import {
 } from 'lucide-react-native';
 import { AuthContext } from '../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { addNote, getUserNotes, getAlchemyItems } from '../services/firestoreService';
+import { addNote, getUserNotes } from '../services/apiNoteService';
+import { getAlchemyItems } from '../services/apiAlchemyService';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import GlassCard from '../components/ui/GlassCard';
 import AnimatedText from '../components/ui/AnimatedText';
@@ -107,10 +108,10 @@ export default function DashboardScreen({ navigation }) {
   const bottomSheetRef = useRef(null);
 
   const fetchData = async () => {
-    if (!user?.uid) return;
+    if (!user) return;
     const [notesResult, alchemyResult] = await Promise.all([
-      getUserNotes(user.uid),
-      getAlchemyItems(user.uid),
+      getUserNotes(),
+      getAlchemyItems(),
     ]);
 
     let combined = [];
@@ -135,9 +136,9 @@ export default function DashboardScreen({ navigation }) {
   useEffect(() => { fetchData(); }, [user]);
 
   const handleAddNote = async () => {
-    if (!newNoteTitle.trim() || !newNoteContent.trim() || !user?.uid) return;
+    if (!newNoteTitle.trim() || !newNoteContent.trim() || !user) return;
     setIsSaving(true);
-    const result = await addNote(user.uid, newNoteTitle, newNoteContent);
+    const result = await addNote(null, newNoteTitle.trim(), newNoteContent.trim());
     setIsSaving(false);
     if (result.success) {
       setModalVisible(false);

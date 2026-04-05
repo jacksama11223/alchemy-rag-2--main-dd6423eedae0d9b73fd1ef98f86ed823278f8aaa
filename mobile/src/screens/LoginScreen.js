@@ -1,7 +1,7 @@
 import React, { useState, useContext, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Image, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, ArrowRight, X } from 'lucide-react-native';
+import { Mail, Lock, ArrowRight, X, Settings } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import { AuthContext } from '../context/AuthContext';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput } from '@gorhom/bottom-sheet';
@@ -16,7 +16,11 @@ export default function LoginScreen({ navigation }) {
   const [isResetting, setIsResetting] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   
-  const { login, forgotPassword, socialLogin } = useContext(AuthContext);
+  const { login, forgotPassword, socialLogin, backendUrl, setBackendUrl } = useContext(AuthContext);
+  const [tempBackendUrl, setTempBackendUrl] = useState(backendUrl);
+
+  // Server Settings Modal
+  const [serverModalVisible, setServerModalVisible] = useState(false);
 
   // Bottom Sheet Refs
   const bottomSheetModalRef = useRef(null);
@@ -125,7 +129,13 @@ export default function LoginScreen({ navigation }) {
       <LinearGradient colors={['#1E1B4B', '#312E81', '#4338CA']} style={styles.background} />
       
       <MotiView from={{ opacity: 0, translateY: -50 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 1000 }} style={styles.headerContainer}>
-        <Text style={styles.title}>Giả Kim Thuật</Text>
+        <View style={styles.headerRow}>
+          <View />
+          <Text style={styles.title}>Giả Kim Thuật</Text>
+          <TouchableOpacity onPress={() => setServerModalVisible(true)} style={styles.serverSettingsBtn}>
+            <Settings size={22} color="#A5B4FC" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.subtitle}>Đăng nhập để tiếp tục hành trình</Text>
       </MotiView>
 
@@ -241,6 +251,36 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </BottomSheetModal>
+
+      {/* Server Settings Modal */}
+      <Modal visible={serverModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.serverModal}>
+            <Text style={styles.modalTitle}>Cài đặt Máy chủ</Text>
+            <Text style={styles.modalDesc}>Nhập địa chỉ IP của máy tính chạy Backend (ví dụ: http://192.168.1.5:5000)</Text>
+            
+            <View style={styles.modalInputContainer}>
+              <TextInput
+                style={styles.modalInput}
+                value={tempBackendUrl}
+                onChangeText={setTempBackendUrl}
+                placeholder="http://192.168.x.x:5000"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={() => { setServerModalVisible(false); setTempBackendUrl(backendUrl); }}>
+                <Text style={styles.modalBtnTextCancel}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnSave} onPress={() => { setBackendUrl(tempBackendUrl); setServerModalVisible(false); Toast.show({ type: 'success', text1: 'Đã lưu cấu hình server' }); }}>
+                <Text style={styles.modalBtnTextSave}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -282,4 +322,19 @@ const styles = StyleSheet.create({
   bottomSheetInput: { flex: 1, color: '#F8FAFC', fontSize: 16 },
   resetButton: { backgroundColor: '#6366F1', height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
   resetButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 20 },
+  serverSettingsBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  serverModal: { backgroundColor: '#1e293b', width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#334155' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#f8fafc', marginBottom: 12 },
+  modalDesc: { fontSize: 14, color: '#94a3b8', lineHeight: 20, marginBottom: 20 },
+  modalInputContainer: { backgroundColor: '#0f172a', borderRadius: 12, paddingHorizontal: 16, height: 50, justifyContent: 'center', borderWidth: 1, borderColor: '#334155', marginBottom: 24 },
+  modalInput: { color: '#f8fafc', fontSize: 15 },
+  modalActions: { flexDirection: 'row', gap: 12 },
+  modalBtnCancel: { flex: 1, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)' },
+  modalBtnSave: { flex: 1, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#6366f1' },
+  modalBtnTextCancel: { color: '#94a3b8', fontWeight: 'bold' },
+  modalBtnTextSave: { color: '#fff', fontWeight: 'bold' },
 });

@@ -553,18 +553,47 @@ const pushDeckToGraph = asyncHandler(async (req, res) => {
 // @route   POST /api/alchemy/process
 // @access  Private
 const processAlchemyContent = asyncHandler(async (req, res) => {
-  const { personaId, templateId, instruction, sourceData } = req.body;
+  const { 
+    personaId, 
+    templateId, 
+    instruction, 
+    sourceData, 
+    content, // fallback for mobile
+    type,    // fallback for mobile
+    title    // fallback for mobile
+  } = req.body;
   const userId = req.user._id;
 
-  // 1. Get API Key from header or ENV
+  // 1. Resolve source data (prioritize sourceData, then content)
+  const actualSourceData = sourceData || content;
+
+  // 2. Get API Key from header or ENV
   const apiKey = req.headers['x-gemini-api-key'] || process.env.GEMINI_API_KEY;
   
+  // LOGGING FOR DEBUGGING
+  console.log('--- Alchemy AI Request ---');
+  console.log(`[USER] ${req.user.email} (${userId})`);
+  console.log(`[DATA] Length: ${actualSourceData?.length || 0}, Type: ${type || 'text'}`);
+  console.log(`[AUTH] Header x-gemini-api-key present: ${!!req.headers['x-gemini-api-key']}`);
+  if (apiKey) {
+    console.log(`[AUTH] API Key (Preview): ${apiKey.substring(0, 10)}... (Total length: ${apiKey.length})`);
+  } else {
+    console.log('[AUTH] API KEY IS MISSING!');
+  }
+  console.log('---------------------------');
+
   if (!apiKey) {
-    res.status(400);
-    throw new Error('Missing Gemini API Key. Please provide it in settings.');
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Thiếu Gemini API Key. Vui lòng kiểm tra lại cấu hình trong phần Hồ sơ của bạn.' 
+    });
   }
 
-  // 2. Resolve Persona & Template Instructions
+  if (!actualSourceData) {
+    return res.status(400).json({ success: false, error: 'Thiếu dữ liệu đầu vào để xử lý.' });
+  }
+
+  // 3. Resolve Persona & Template Instructions
   let systemPrompt = "You are a powerful AI assistant expert in content alchemy and transformation.";
   
   try {
@@ -581,12 +610,12 @@ const processAlchemyContent = asyncHandler(async (req, res) => {
     console.warn('[Alchemy-Process] Error fetching persona/template metadata:', error.message);
   }
 
-  // 3. Run AI Orchestrator
+  // 4. Run AI Orchestrator
   const orchestrator = new AIOrchestrator(apiKey);
   
   const userMessage = `
     [SOURCE DATA TO PROCESS]
-    ${sourceData || "No source data provided."}
+    ${actualSourceData}
     
     [USER INSTRUCTION]
     ${instruction || "Please process the content based on your persona and style."}

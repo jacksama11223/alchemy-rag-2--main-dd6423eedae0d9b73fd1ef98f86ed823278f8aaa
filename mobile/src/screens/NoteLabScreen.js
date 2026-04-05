@@ -14,14 +14,14 @@ import Toast from 'react-native-toast-message';
 
 import { AuthContext } from '../context/AuthContext';
 import { useApiKey } from '../context/ApiKeyContext';
-import { addNote, getUserNotes, deleteNote } from '../services/firestoreService';
+import { addNote, getUserNotes, deleteNote } from '../services/apiNoteService';
 import { sendChatMessage, getRAGContext } from '../services/ragService';
 import GlassCard from '../components/ui/GlassCard';
 
 // ─── Relative time helper ─────────────────────────────────────────────────────
 const relativeTime = (timestamp) => {
   if (!timestamp) return '';
-  const ms = timestamp?.seconds ? timestamp.seconds * 1000 : timestamp;
+  const ms = typeof timestamp === 'string' ? new Date(timestamp).getTime() : (timestamp?.seconds ? timestamp.seconds * 1000 : timestamp);
   const diff = Date.now() - ms;
   const m = Math.floor(diff / 60000);
   if (m < 1) return 'Vừa xong';
@@ -256,14 +256,14 @@ export default function NoteLabScreen({ navigation }) {
   const [selectedNote, setSelectedNote] = useState(null);
 
   const fetchNotes = useCallback(async () => {
-    if (!user?.uid) return;
+    if (!user) return;
     setIsLoading(true);
-    const result = await getUserNotes(user.uid);
+    const result = await getUserNotes();
     setIsLoading(false);
     if (result.success) {
       setNotes(result.data || []);
     }
-  }, [user?.uid]);
+  }, [user]);
 
   useEffect(() => {
     fetchNotes();
@@ -285,8 +285,8 @@ export default function NoteLabScreen({ navigation }) {
   };
 
   const handleSaveNote = async ({ title, content, aiEnhanced }) => {
-    if (!user?.uid) return;
-    const result = await addNote(user.uid, title, content, aiEnhanced);
+    if (!user) return;
+    const result = await addNote(null, title, content, selectedNote?.id);
     if (result.success) {
       Toast.show({ type: 'success', text1: '✅ Đã lưu', text2: 'Ghi chú đã được lưu' });
       setEditorVisible(false);

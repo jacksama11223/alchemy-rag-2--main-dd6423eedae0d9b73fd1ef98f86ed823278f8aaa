@@ -7,7 +7,7 @@ import { AuthContext } from '../src/context/AuthContext';
 import { 
   addAlchemyItem, getAlchemyItems, deleteAlchemyItem,
   addAlchemyFlashcard, getAlchemyFlashcards, deleteAlchemyFlashcard 
-} from '../src/services/firestoreService';
+} from '../src/services/apiAlchemyService';
 
 const { width } = Dimensions.get('window');
 
@@ -60,10 +60,10 @@ export default function Alchemy({ navigation }) {
 
   // --- API CALLS FOR ITEMS ---
   const fetchItems = async () => {
-    if (!user?.uid) return;
+    if (!user) return;
     setLoading(true);
     try {
-      const result = await getAlchemyItems(user.uid);
+      const result = await getAlchemyItems();
       if (result.success) {
         setItems(result.data);
       }
@@ -72,7 +72,7 @@ export default function Alchemy({ navigation }) {
   };
 
   const addItem = async () => {
-    if (!inputContent.trim() || !user?.uid) return Alert.alert('Lỗi', 'Vui lòng nhập nội dung');
+    if (!inputContent.trim() || !user) return Alert.alert('Lỗi', 'Vui lòng nhập nội dung');
     setLoading(true);
     try {
       const newItem = {
@@ -80,7 +80,7 @@ export default function Alchemy({ navigation }) {
         title: inputContent.substring(0, 20) + '...',
         extractedText: inputContent,
       };
-      const result = await addAlchemyItem(user.uid, newItem);
+      const result = await addAlchemyItem(newItem);
       if (result.success) {
         setInputContent('');
         setInputType(null);
@@ -103,10 +103,10 @@ export default function Alchemy({ navigation }) {
 
   // --- API CALLS FOR FLASHCARDS ---
   const fetchFlashcards = async () => {
-    if (!user?.uid) return;
+    if (!user) return;
     setLoading(true);
     try {
-      const result = await getAlchemyFlashcards(user.uid);
+      const result = await getAlchemyFlashcards();
       if (result.success) {
         setFlashcards(result.data);
       }
@@ -115,30 +115,18 @@ export default function Alchemy({ navigation }) {
   };
 
   const addFlashcard = async () => {
-    if (!inputContent.trim() || !user?.uid) return Alert.alert('Lỗi', 'Vui lòng nhập nội dung mặt trước');
+    if (!inputContent.trim() || !user) return Alert.alert('Lỗi', 'Vui lòng nhập nội dung mặt trước');
     setLoading(true);
     try {
+      // In a real app, you'd use the dedicated Forge backend route
       let backContent = 'Mặt sau tự động tạo...';
-      try {
-        const { GoogleGenAI, ThinkingLevel } = require('@google/genai');
-        const ai = new GoogleGenAI({ apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || 'dummy' });
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: `Tạo mặt sau cho flashcard có mặt trước là: "${inputContent}". Giải thích ngắn gọn, dễ hiểu.`
-        });
-        if (response.text) {
-          backContent = response.text;
-        }
-      } catch (genAiError) {
-        console.warn('Lỗi khi gọi Gemini:', genAiError);
-      }
-
+      
       const newCard = {
         front: inputContent,
         back: backContent,
         tags: ['Alchemy'],
       };
-      const result = await addAlchemyFlashcard(user.uid, newCard);
+      const result = await addAlchemyFlashcard(newCard);
       if (result.success) {
         setInputContent('');
         fetchFlashcards();
@@ -243,7 +231,7 @@ export default function Alchemy({ navigation }) {
                   back: output.result,
                   tags: ['Alchemy', selectedFlow.name],
               };
-              const result = await addAlchemyFlashcard(user.uid, newCard);
+              const result = await addAlchemyFlashcard(newCard);
               if (result.success) {
                   fetchFlashcards();
                   setActiveTab('flashcards');
@@ -256,7 +244,7 @@ export default function Alchemy({ navigation }) {
                   title: `[${selectedFlow.name}] ${inputContent.substring(0, 20)}...`,
                   extractedText: output.result,
               };
-              const result = await addAlchemyItem(user.uid, newItem);
+              const result = await addAlchemyItem(newItem);
               if (result.success) {
                   fetchItems();
                   setActiveTab('items');

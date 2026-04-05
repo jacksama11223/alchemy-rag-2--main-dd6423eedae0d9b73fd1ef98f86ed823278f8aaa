@@ -16,15 +16,18 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ApiKeyProvider } from './src/context/ApiKeyContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 async function registerForPushNotificationsAsync() {
+  if (Platform.OS === 'web') return null;
   let token;
   if (Device.isDevice) {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -74,17 +77,21 @@ export default function App() {
       }
     });
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      setNotification(notification);
-    });
+    if (Platform.OS !== 'web') {
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        setNotification(notification);
+      });
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response received:', response);
-    });
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        console.log('Notification response received:', response);
+      });
+    }
 
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current);
-      Notifications.removeNotificationSubscription(responseListener.current);
+      if (Platform.OS !== 'web') {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
     };
   }, []);
 

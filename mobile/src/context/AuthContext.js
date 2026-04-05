@@ -57,10 +57,12 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [backendToken, setBackendToken] = useState(null);
+  const [backendUrl, setBackendUrlState] = useState('http://localhost:5000');
   const [isLoading, setIsLoading] = useState(true);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
 
   useEffect(() => {
+    loadBackendUrl();
     checkOnboarding();
     
     if (!auth) {
@@ -123,6 +125,16 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  const loadBackendUrl = async () => {
+    const stored = await safeStorage.getItem('backend_base_url');
+    if (stored) setBackendUrlState(stored);
+  };
+
+  const setBackendUrl = async (url) => {
+    await safeStorage.setItem('backend_base_url', url);
+    setBackendUrlState(url);
+  };
+
   const checkOnboarding = async () => {
     try {
       const onboarded = await safeStorage.getItem('hasSeenOnboarding');
@@ -143,15 +155,54 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      return { success: true };
+      // 1. First attempt: Firebase Login
+      // This is necessary for push notifications and other Firebase features
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        return { success: true };
+      } catch (firebaseErr) {
+        console.log('[Auth] Firebase login failed, attempting Backend MongoDB fallback...', firebaseErr.code);
+        
+        // 2. Fallback attempt: Backend API (MongoDB)
+        // If Firebase fails (e.g. user exists in MongoDB only), we try the backend directly.
+        const baseUrl = await safeStorage.getItem('backend_base_url') || 'http://localhost:5000';
+        
+        const response = await fetch(`${baseUrl}/api/users/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        
+        const backendData = await response.json();
+        
+        if (response.ok && backendData.token) {
+          // Success! User exists in MongoDB.
+          await safeStorage.setItem('userToken', backendData.token);
+          setBackendToken(backendData.token);
+          
+          // Set a minimal user object so the app thinks we are logged in
+          setUser({
+            uid: backendData.id,
+            email: backendData.email,
+            displayName: backendData.name,
+            ...backendData
+          });
+          
+          console.log('[Auth] Backend MongoDB login successful');
+          return { success: true };
+        } else {
+          // Both failed
+          let message = 'Đăng nhập thất bại';
+          if (backendData.message) message = backendData.message;
+          else if (firebaseErr.code === 'auth/invalid-credential') message = 'Email hoặc mật khẩu không đúng';
+          else if (firebaseErr.code === 'auth/user-not-found') message = 'Tài khoản không tồn tại';
+          
+          return { success: false, message };
+        }
+      }
     } catch (e) {
-      console.log('Login error', e);
-      let message = 'Đăng nhập thất bại';
-      if (e.code === 'auth/invalid-credential') message = 'Email hoặc mật khẩu không đúng';
-      if (e.code === 'auth/user-not-found') message = 'Tài khoản không tồn tại';
-      if (e.code === 'auth/wrong-password') message = 'Mật khẩu không đúng';
-      return { success: false, message };
+      console.log('Dual Login error', e);
+      return { success: false, message: 'Lỗi hệ thống khi đăng nhập' };
     }
   };
 
@@ -213,6 +264,8 @@ export const AuthProvider = ({ children }) => {
       user, 
       token: backendToken || (user ? user.uid : null), 
       backendToken,
+      backendUrl,
+      setBackendUrl,
       isLoading, 
       hasSeenOnboarding, 
       completeOnboarding, 
