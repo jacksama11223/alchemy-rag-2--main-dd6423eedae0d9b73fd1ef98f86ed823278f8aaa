@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, optionalProtect } = require('../middleware/authMiddleware');
 const {
   getReports, createReport, updateReport,
   getFeedbacks, getMyFeedbacks, createFeedback, updateFeedback,
@@ -14,7 +14,7 @@ const {
 router.route('/reports').get(protect, getReports).post(protect, createReport);
 router.route('/reports/:id').put(protect, updateReport);
 
-router.route('/feedbacks').get(protect, getFeedbacks).post(createFeedback);
+router.route('/feedbacks').get(protect, getFeedbacks).post(optionalProtect, createFeedback);
 router.get('/test-email', testEmail);
 router.route('/my-feedbacks').get(protect, getMyFeedbacks);
 router.route('/feedbacks/:id').put(protect, updateFeedback);

@@ -24,6 +24,7 @@ const sendEmail = async (options) => {
   const mailOptions = {
     from: `"LearnAI Support" <${process.env.EMAIL_USER}>`,
     to: options.email,
+    replyTo: options.replyTo, // Allow admin to reply directly to the user
     subject: options.subject,
     html: options.html || options.message,
   };

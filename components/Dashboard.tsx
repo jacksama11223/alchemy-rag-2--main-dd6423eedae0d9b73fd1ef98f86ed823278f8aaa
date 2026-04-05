@@ -179,9 +179,26 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
         setNotifications(notifs);
     };
     loadNotifs();
-    const interval = setInterval(loadNotifs, 10000);
-    return () => clearInterval(interval);
+    
+    const token = localStorage.getItem('token');
+    const socket = (window as any).socket;
+    
+    if (socket) {
+        socket.on('new_notification', (newNotif: any) => {
+            setNotifications(prev => {
+                // Check if notif already exists to avoid duplicates
+                if (prev.find(n => n._id === newNotif._id)) return prev;
+                return [newNotif, ...prev];
+            });
+        });
+    }
 
+    const interval = setInterval(loadNotifs, 30000); // Polling as fallback (increased to 30s)
+    
+    return () => {
+        clearInterval(interval);
+        if (socket) socket.off('new_notification');
+    };
   }, []);
 
   useEffect(() => {

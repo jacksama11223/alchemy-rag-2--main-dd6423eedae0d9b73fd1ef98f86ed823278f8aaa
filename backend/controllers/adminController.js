@@ -51,9 +51,13 @@ const createFeedback = asyncHandler(async (req, res) => {
   };
 
   // If user is logged in, link it. Otherwise, it's a guest feedback.
+  console.log('API: Feedback Headers - Auth:', req.headers.authorization ? 'Present' : 'Missing');
+  
   if (req.user) {
     feedbackData.user = req.user._id;
-    console.log(`API: Received feedback from logged-in user: ${req.user.email}`);
+    console.log(`API: Identified logged-in user: ${req.user.name} (${req.user._id})`);
+  } else {
+    console.log('API: Processing feedback as Guest');
   }
 
   let createdFeedback;
@@ -67,11 +71,14 @@ const createFeedback = asyncHandler(async (req, res) => {
   try {
     const senderInfo = req.user ? `${req.user.name} (${req.user.email})` : `${name || 'Khách'} (${email || 'Không có email'})`;
     const senderName = req.user ? req.user.name : (name || 'Guest');
-    const senderUserId = req.user ? req.user._id : 'Guest';
+    const senderUserId = req.user ? req.user._id.toString() : 'Guest';
+    const senderEmail = req.user ? req.user.email : (email || '');
+    const feedbackId = createdFeedback ? createdFeedback._id.toString() : `temp_${Date.now()}`;
 
     await sendEmail({
       email: 'jacktayden@gmail.com',
-      subject: `LearnAI: New Feedback from ${senderName}`,
+      replyTo: senderEmail, // Allow direct reply from Gmail
+      subject: `LearnAI: New Feedback from ${senderName} [FID: ${feedbackId}]`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; color: #333;">
           <h2 style="color: #00cfd5;">🚀 Phản hồi mới từ hệ thống LearnAI</h2>
@@ -79,16 +86,16 @@ const createFeedback = asyncHandler(async (req, res) => {
           <p><strong>Loại:</strong> ${type}</p>
           <p><strong>Mức độ:</strong> ${priority || 'Medium'}</p>
           <p><strong>Bởi:</strong> ${senderInfo}</p>
-          <p><strong>ID Người dùng:</strong> ${senderUserId}</p>
+          <p><strong>ID Người dùng:</strong> <code style="background: #eee; padding: 2px 4px; border-radius: 4px;">${senderUserId}</code></p>
           <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin-top: 10px; border-left: 4px solid #00cfd5;">
             <p><strong>Nội dung:</strong></p>
             <p>${content}</p>
           </div>
-          <p style="color: #6b7280; font-size: 11px; margin-top: 20px; text-align: center;">Đây là thông báo tự động từ hệ thống hỗ trợ LearnAI.</p>
+          <p style="color: #6b7280; font-size: 11px; margin-top: 20px; text-align: center;">Đây là thông báo tự động từ hệ thống hỗ trợ LearnAI. Phản hồi trực tiếp của bạn trong Gmail sẽ được đồng bộ vào ứng dụng nếu bạn giữ nguyên thẻ [FID: ...] trong tiêu đề.</p>
         </div>
       `,
     });
-    console.log(`API: Admin notification email sent successfully to jacktayden@gmail.com`);
+    console.log(`API: Admin notification email sent successfully to jacktayden@gmail.com with FID: ${feedbackId}`);
   } catch (error) {
     console.error('API: Email sending failed for Admin notification:', error.message);
   }
@@ -161,6 +168,29 @@ const updateFeedback = asyncHandler(async (req, res) => {
       } catch (error) {
         console.error('Failed to send user feedback update email:', error);
       }
+    }
+
+    // Also add to persistent user notifications for the notification center
+    try {
+      const user = await User.findById(feedback.user);
+      if (user) {
+        const newNotif = {
+          type: 'info',
+          message: `Admin LearnAI đã phản hồi yêu cầu của bạn: "${reply.substring(0, 50)}..."`,
+          read: false,
+          createdAt: new Date()
+        };
+        user.notifications.push(newNotif);
+        await user.save();
+        
+        // Emit new_notification for real-time badge update
+        const latestNotif = user.notifications[user.notifications.length - 1];
+        if (req.io) {
+            req.io.to(user._id.toString()).emit('new_notification', latestNotif);
+        }
+      }
+    } catch (notifErr) {
+      console.error('API: Failed to create persistent notification:', notifErr.message);
     }
 
     res.json(updatedFeedback);

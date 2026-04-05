@@ -7,6 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { PeerServer } = require('peer');
 const { initSRNotificationJob } = require('./utils/srNotificationJob');
+const { startImapListener } = require('./utils/imapListener');
 
 // Load env vars
 dotenv.config();
@@ -205,6 +206,9 @@ app.use('/api/rag', require('./routes/ragRoutes'));
 app.use('/api/global-knowledge', require('./routes/globalKnowledgeRoutes'));
 app.use('/api/user-memory', require('./routes/userMemoryRoutes'));
 app.use('/api/roadmap', require('./routes/roadmapRoutes'));
+
+// Initialize IMAP Listener
+startImapListener(io);
 
 app.get('/', (req, res) => {
   res.send('API is running...');
