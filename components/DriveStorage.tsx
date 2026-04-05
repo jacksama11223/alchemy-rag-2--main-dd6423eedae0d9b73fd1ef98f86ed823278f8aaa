@@ -6,6 +6,7 @@ import { DriveFile, DriveFileType, AlchemyIntent } from '../types';
 import { semanticFileClustering } from '../services/geminiService'; // Import
 import { Uploadfile } from './DriveStorage/Uploadfile'; // IMPORT NEW COMPONENT
 import { DeepRead } from './DriveStorage/DeepRead'; // IMPORT DEEP READ
+import { AuthoringModal } from './DriveStorage/AuthoringModal'; // IMPORT AI AUTHORING
 import { getFilesFromBackend, saveFileToBackend, deleteFileFromBackend } from '../services/mockBackend'; // API
 import { FeatureWindowControls } from './FeatureWindowControls';
 import { IncomingAsset } from '../utils/dataProcessor';
@@ -261,6 +262,7 @@ export const DriveStorage: React.FC<DriveStorageProps> = ({ onBack, onShowAccoun
     
     // Preview State
     const [previewFile, setPreviewFile] = useState<DriveFile | null>(null);
+    const [isAuthoringOpen, setIsAuthoringOpen] = useState(false);
 
     useEffect(() => {
         const loadFiles = async () => {
@@ -461,6 +463,13 @@ export const DriveStorage: React.FC<DriveStorageProps> = ({ onBack, onShowAccoun
                 onExtractText={handleMicroLearning}
             />
 
+            <AuthoringModal 
+                isOpen={isAuthoringOpen}
+                onClose={() => setIsAuthoringOpen(false)}
+                parentId={currentFolderId}
+                onSuccess={(newFile) => setFiles(prev => [...prev, newFile])}
+            />
+
             <nav className="w-full max-w-[1400px] flex justify-between items-center mb-6 px-4 relative z-20">
                 <div className="flex items-center gap-3 cursor-pointer group" onClick={onBack}>
                     <div className="p-2 bg-white/20 rounded-full group-hover:bg-white/30 transition-colors backdrop-blur-md">
@@ -509,6 +518,14 @@ export const DriveStorage: React.FC<DriveStorageProps> = ({ onBack, onShowAccoun
                         currentFolderId={currentFolderId} 
                         onUploadComplete={handleUploadComplete} 
                     />
+
+                    <button 
+                        onClick={() => setIsAuthoringOpen(true)}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600/40 to-indigo-600/40 border border-white/20 text-white font-bold hover:from-blue-600/60 hover:to-indigo-600/60 transition-all shadow-lg group mb-2"
+                    >
+                        <span className="material-symbols-outlined text-yellow-400 group-hover:rotate-12 transition-transform">auto_awesome</span>
+                        <span className="text-sm">AI Authoring Lab</span>
+                    </button>
 
                     <nav className="flex-1 space-y-1">
                         {[
