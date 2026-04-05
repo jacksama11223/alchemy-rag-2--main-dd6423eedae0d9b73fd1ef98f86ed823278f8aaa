@@ -1,14 +1,20 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ActivityIndicator, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, User, Settings, Shield, ChevronRight } from 'lucide-react-native';
+import { LogOut, User, Settings, Shield, ChevronRight, BrainCircuit, Globe, Key } from 'lucide-react-native';
 import { AuthContext } from '../context/AuthContext';
+import { useApiKey } from '../context/ApiKeyContext';
 import { MotiView } from 'moti';
 
 export default function ProfileScreen() {
   const { user, logout } = useContext(AuthContext);
+  const { apiKey, setApiKey, backendUrl, setBackendUrl } = useApiKey();
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [isAIModalVisible, setAIModalVisible] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState(apiKey);
+  const [tempBackendUrl, setTempBackendUrl] = useState(backendUrl);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleLogout = () => {
     setLogoutModalVisible(true);
@@ -22,10 +28,21 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { icon: User, title: 'Thông tin cá nhân', color: '#6366F1' },
-    { icon: Shield, title: 'Bảo mật & Mật khẩu', color: '#10B981' },
-    { icon: Settings, title: 'Cài đặt ứng dụng', color: '#F59E0B' },
+    { icon: User, title: 'Thông tin cá nhân', color: '#6366F1', onPress: () => {} },
+    { icon: BrainCircuit, title: 'Cấu hình AI (Gemini)', color: '#A855F7', onPress: () => { setTempApiKey(apiKey); setTempBackendUrl(backendUrl); setAIModalVisible(true); } },
+    { icon: Shield, title: 'Bảo mật & Mật khẩu', color: '#10B981', onPress: () => {} },
+    { icon: Settings, title: 'Cài đặt ứng dụng', color: '#F59E0B', onPress: () => {} },
   ];
+
+  const handleSaveAIConfig = async () => {
+    setIsSaving(true);
+    await Promise.all([
+      setApiKey(tempApiKey),
+      setBackendUrl(tempBackendUrl)
+    ]);
+    setIsSaving(false);
+    setAIModalVisible(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -62,7 +79,7 @@ export default function ProfileScreen() {
             animate={{ opacity: 1, translateX: 0 }} 
             transition={{ type: 'timing', duration: 400, delay: 200 + index * 100 }}
           >
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity style={styles.menuItem} onPress={item.onPress}>
               <View style={[styles.menuIconContainer, { backgroundColor: item.color + '20' }]}>
                 <item.icon color={item.color} size={22} />
               </View>
@@ -110,6 +127,75 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* AI Configuration Modal */}
+      <Modal
+        visible={isAIModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setAIModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <MotiView 
+            from={{ translateY: 300 }}
+            animate={{ translateY: 0 }}
+            style={[styles.modalContent, { width: '90%', maxWidth: 400 }]}
+          >
+            <View style={styles.modalHeader}>
+              <BrainCircuit color="#A855F7" size={24} />
+              <Text style={styles.modalTitle}> Cấu hình AI & Backend</Text>
+            </View>
+            
+            <Text style={styles.inputLabel}>Gemini API Key</Text>
+            <View style={styles.inputContainer}>
+              <Key color="#94A3B8" size={18} style={styles.inputIcon} />
+              <TextInput 
+                style={styles.textInput}
+                value={tempApiKey}
+                onChangeText={setTempApiKey}
+                placeholder="Dán API Key của bạn vào đây..."
+                placeholderTextColor="#64748B"
+                secureTextEntry={true}
+              />
+            </View>
+            <Text style={styles.inputHelp}>Dùng để chạy Chatbot và Alchemy. Key được lưu an toàn trên máy bạn.</Text>
+
+            <Text style={[styles.inputLabel, { marginTop: 20 }]}>Backend URL</Text>
+            <View style={styles.inputContainer}>
+              <Globe color="#94A3B8" size={18} style={styles.inputIcon} />
+              <TextInput 
+                style={styles.textInput}
+                value={tempBackendUrl}
+                onChangeText={setTempBackendUrl}
+                placeholder="http://192.168.1.xxx:5000"
+                placeholderTextColor="#64748B"
+                autoCapitalize="none"
+              />
+            </View>
+            <Text style={styles.inputHelp}>Địa chỉ IP máy tính chạy server backend.</Text>
+
+            <View style={[styles.modalActions, { marginTop: 30 }]}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton} 
+                onPress={() => setAIModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalConfirmButton, { backgroundColor: '#A855F7' }]} 
+                onPress={handleSaveAIConfig}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>Lưu cấu hình</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </MotiView>
         </View>
       </Modal>
     </View>
@@ -186,5 +272,20 @@ const styles = StyleSheet.create({
   modalCancelButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', marginRight: 10, alignItems: 'center' },
   modalCancelText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   modalConfirmButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#EF4444', marginLeft: 10, alignItems: 'center' },
-  modalConfirmText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' }
+  modalConfirmText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  inputLabel: { color: '#E2E8F0', fontSize: 14, fontWeight: '600', marginBottom: 8, alignSelf: 'flex-start' },
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#0F172A', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#334155',
+    paddingHorizontal: 12,
+    width: '100%'
+  },
+  inputIcon: { marginRight: 10 },
+  textInput: { flex: 1, color: '#FFF', paddingVertical: 12, fontSize: 15 },
+  inputHelp: { color: '#64748B', fontSize: 12, marginTop: 6, alignSelf: 'flex-start' }
 });

@@ -45,12 +45,18 @@ const buildHeaders = async () => {
     if (geminiKey) headers['x-gemini-api-key'] = geminiKey;
   } catch {}
 
-  // Firebase ID Token for backend auth
+  // Backend JWT for backend auth
   try {
-    const firebaseUser = auth?.currentUser;
-    if (firebaseUser) {
-      const token = await firebaseUser.getIdToken();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+    const backendToken = await AsyncStorage.getItem('userToken');
+    if (backendToken) {
+      headers['Authorization'] = `Bearer ${backendToken}`;
+    } else {
+      // Fallback for cases where sync hasn't occurred yet, though userToken is preferred
+      const firebaseUser = auth?.currentUser;
+      if (firebaseUser) {
+        const token = await firebaseUser.getIdToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
     }
   } catch {}
 

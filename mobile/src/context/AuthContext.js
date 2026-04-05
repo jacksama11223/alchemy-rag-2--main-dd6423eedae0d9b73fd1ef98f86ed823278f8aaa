@@ -56,6 +56,7 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [backendToken, setBackendToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
 
@@ -70,8 +71,37 @@ export const AuthProvider = ({ children }) => {
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Fetch additional user data from Firestore if needed
         try {
+          // 1. Get Firebase ID Token
+          const idToken = await firebaseUser.getIdToken();
+          
+          // 2. Exchange for Backend JWT
+          // Note: We'll try to fetch from AsyncStorage first if already synced, or call backend
+          const storedToken = await safeStorage.getItem('userToken');
+          
+          // Call backend to sync/login
+          const baseUrl = await safeStorage.getItem('backend_base_url') || 'http://localhost:5000';
+          console.log(`[Auth] Syncing with backend: ${baseUrl}/api/users/social`);
+          
+          try {
+            const response = await fetch(`${baseUrl}/api/users/social`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ provider: 'google', idToken })
+            });
+            const data = await response.json();
+            
+            if (data.token) {
+              await safeStorage.setItem('userToken', data.token);
+              setBackendToken(data.token);
+              console.log('[Auth] Backend token sync successful');
+            }
+          } catch (backendErr) {
+            console.warn('[Auth] Backend sync failed, using stored token if available', backendErr.message);
+            if (storedToken) setBackendToken(storedToken);
+          }
+
+          // 3. Fetch additional user data from Firestore
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             setUser({ ...firebaseUser, ...userDoc.data() });
@@ -79,11 +109,13 @@ export const AuthProvider = ({ children }) => {
             setUser(firebaseUser);
           }
         } catch (error) {
-          console.log("Error fetching user data from Firestore", error);
+          console.log("Error during auth state sync", error);
           setUser(firebaseUser);
         }
       } else {
         setUser(null);
+        setBackendToken(null);
+        await safeStorage.removeItem('userToken');
       }
       setIsLoading(false);
     });
@@ -179,7 +211,8 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={{ 
       user, 
-      token: user ? user.uid : null, 
+      token: backendToken || (user ? user.uid : null), 
+      backendToken,
       isLoading, 
       hasSeenOnboarding, 
       completeOnboarding, 

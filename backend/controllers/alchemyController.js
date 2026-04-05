@@ -7,6 +7,8 @@ const AlchemyStorageItem = require('../models/AlchemyStorageItem');
 const AlchemyStorageFlashcard = require('../models/AlchemyStorageFlashcard');
 const FlashcardDeck = require('../models/FlashcardDeck');
 const Node = require('../models/Node');
+const AIOrchestrator = require('../services/aiOrchestrator');
+
 
 // --- AlchemyStorageItem ---
 const getAlchemyStorageItems = asyncHandler(async (req, res) => {
@@ -547,6 +549,73 @@ const pushDeckToGraph = asyncHandler(async (req, res) => {
   res.status(201).json(obj);
 });
 
+// @desc    Process content with AI (Alchemy)
+// @route   POST /api/alchemy/process
+// @access  Private
+const processAlchemyContent = asyncHandler(async (req, res) => {
+  const { personaId, templateId, instruction, sourceData } = req.body;
+  const userId = req.user._id;
+
+  // 1. Get API Key from header or ENV
+  const apiKey = req.headers['x-gemini-api-key'] || process.env.GEMINI_API_KEY;
+  
+  if (!apiKey) {
+    res.status(400);
+    throw new Error('Missing Gemini API Key. Please provide it in settings.');
+  }
+
+  // 2. Resolve Persona & Template Instructions
+  let systemPrompt = "You are a powerful AI assistant expert in content alchemy and transformation.";
+  
+  try {
+    if (personaId && personaId !== 'default') {
+      const persona = await AlchemyPersona.findById(personaId);
+      if (persona) systemPrompt = persona.instruction || persona.description || systemPrompt;
+    }
+
+    if (templateId && templateId !== 'default') {
+       const template = await AlchemyTemplate.findById(templateId);
+       if (template) systemPrompt += `\n\nTemplate/Output Style: ${template.instruction || template.description}`;
+    }
+  } catch (error) {
+    console.warn('[Alchemy-Process] Error fetching persona/template metadata:', error.message);
+  }
+
+  // 3. Run AI Orchestrator
+  const orchestrator = new AIOrchestrator(apiKey);
+  
+  const userMessage = `
+    [SOURCE DATA TO PROCESS]
+    ${sourceData || "No source data provided."}
+    
+    [USER INSTRUCTION]
+    ${instruction || "Please process the content based on your persona and style."}
+  `;
+
+  try {
+    console.log(`[Alchemy-Process] Starting AI generation with persona: ${personaId || 'default'}...`);
+    const aiResponse = await orchestrator.run(systemPrompt, userMessage, [], userId.toString());
+    res.json({ success: true, result: aiResponse });
+  } catch (error) {
+    console.error('[Alchemy-Process] AI Generation Error:', error.message);
+    
+    // Check for specific Google AI errors (like Invalid API Key)
+    if (error.message && error.message.includes('API key not valid')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "API key không hợp lệ. Vui lòng kiểm tra lại cấu hình Gemini API Key của bạn.",
+        details: error.message
+      });
+    }
+
+    res.status(error.status || 500).json({ 
+      success: false, 
+      error: error.message || 'Lỗi khi xử lý AI Alchemy',
+      details: error.stack
+    });
+  }
+});
+
 module.exports = {
   getAlchemyLogs, createAlchemyLog,
   getTutorPersonas, createTutorPersona, updateTutorPersona, deleteTutorPersona,
@@ -555,5 +624,5 @@ module.exports = {
   getAlchemyStorageItems, createAlchemyStorageItem, updateAlchemyStorageItem, deleteAlchemyStorageItem,
   getAlchemyStorageFlashcards, createAlchemyStorageFlashcard, updateAlchemyStorageFlashcard, deleteAlchemyStorageFlashcard,
   getFlashcardDecks, createFlashcardDeck, updateFlashcardDeck, deleteFlashcardDeck,
-  pushDeckToGraph
+  pushDeckToGraph, processAlchemyContent
 };

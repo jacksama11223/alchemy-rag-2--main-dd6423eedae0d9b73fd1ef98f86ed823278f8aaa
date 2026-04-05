@@ -9,7 +9,7 @@ const {
   getAlchemyStorageItems, createAlchemyStorageItem, updateAlchemyStorageItem, deleteAlchemyStorageItem,
   getAlchemyStorageFlashcards, createAlchemyStorageFlashcard, updateAlchemyStorageFlashcard, deleteAlchemyStorageFlashcard,
   getFlashcardDecks, createFlashcardDeck, updateFlashcardDeck, deleteFlashcardDeck,
-  pushDeckToGraph
+  pushDeckToGraph, processAlchemyContent
 } = require('../controllers/alchemyController');
 
 router.route('/logs').get(protect, getAlchemyLogs).post(protect, createAlchemyLog);
@@ -25,6 +25,9 @@ router.route('/decks/:id').put(protect, updateFlashcardDeck).delete(protect, del
 
 // Push entire deck as a single Knowledge Graph node
 router.route('/push-deck-to-graph').post(protect, pushDeckToGraph);
+
+// Process content with AI (Alchemy)
+router.route('/process').post(protect, processAlchemyContent);
 
 router.route('/tutor-personas').get(protect, getTutorPersonas).post(protect, createTutorPersona);
 router.route('/tutor-personas/:id').put(protect, updateTutorPersona).delete(protect, deleteTutorPersona);
