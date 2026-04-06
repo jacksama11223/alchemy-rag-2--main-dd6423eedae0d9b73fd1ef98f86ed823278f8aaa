@@ -234,6 +234,17 @@ exports.submitTest = async (req, res) => {
       console.error('[RAGSync] Error in background sync:', ragError);
     }
 
+    // Trigger Skill Achievement Sync (New Feature)
+    try {
+      const GamificationController = require('./gamificationController');
+      if (GamificationController.syncSkillAchievementsInternal) {
+        // Run in background
+        GamificationController.syncSkillAchievementsInternal(userId, session.topic, session.analysis, req);
+      }
+    } catch (syncError) {
+      console.error('[SkillSync] Error triggering skill sync:', syncError);
+    }
+
     res.status(200).json({ score, totalQuestions: session.testContent.length, analysis: session.analysis, roadmap: session.roadmap });
   } catch (error) {
     console.error('Error submitting test:', error);
@@ -255,5 +266,18 @@ exports.getLatestRoadmap = async (req, res) => {
   } catch (error) {
     console.error('Error fetching roadmap:', error);
     res.status(500).json({ message: 'Failed to fetch roadmap' });
+  }
+};
+
+exports.getAllRoadmaps = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const roadmaps = await AdaptiveLearning.find({ userId, status: 'completed' })
+      .sort({ updatedAt: -1 });
+    
+    res.status(200).json(roadmaps || []);
+  } catch (error) {
+    console.error('Error fetching all roadmaps:', error);
+    res.status(500).json({ message: 'Failed to fetch roadmaps' });
   }
 };

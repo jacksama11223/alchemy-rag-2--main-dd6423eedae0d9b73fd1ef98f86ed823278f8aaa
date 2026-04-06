@@ -24,6 +24,12 @@ import {
   ExternalLink,
   RefreshCcw,
   TrendingUp,
+  ArrowLeft,
+  History,
+  Award,
+  BookOpen,
+  Layers,
+  ArrowRight
 } from 'lucide-react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useApiKey } from '../context/ApiKeyContext';
@@ -34,7 +40,7 @@ const { width } = Dimensions.get('window');
 export default function AdaptiveLearningScreen() {
   const { backendToken, backendUrl } = useContext(AuthContext);
   const { apiKey } = useApiKey();
-  const [step, setStep] = useState('input'); // input, loading, test, result, roadmap
+  const [step, setStep] = useState('list'); // list, create, loading, test, result, roadmap
   const [topic, setTopic] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [questions, setQuestions] = useState([]);
@@ -43,31 +49,56 @@ export default function AdaptiveLearningScreen() {
   const [analysis, setAnalysis] = useState(null);
   const [roadmap, setRoadmap] = useState([]);
   const [score, setScore] = useState(0);
+  const [allRoadmaps, setAllRoadmaps] = useState([]);
+  const [skillAchievements, setSkillAchievements] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    fetchLatestRoadmap();
-  }, []);
+    if (backendToken) {
+      fetchAllData();
+    }
+  }, [backendToken]);
 
-  const fetchLatestRoadmap = async () => {
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    await Promise.all([
+      fetchRoadmaps(),
+      fetchSkillAchievements()
+    ]);
+    setIsLoading(false);
+  };
+
+  const fetchRoadmaps = async () => {
     try {
-      if (!backendToken) return;
-      const res = await fetch(`${backendUrl}/api/adaptive/roadmap`, {
-        headers: { 
-          Authorization: `Bearer ${backendToken}`,
-          'x-gemini-api-key': apiKey || ''
-        }
+      const res = await fetch(`${backendUrl}/api/adaptive/all-roadmaps`, {
+        headers: { Authorization: `Bearer ${backendToken}` }
       });
       const data = await res.json();
-      if (data) {
-        setAnalysis(data.analysis);
-        setRoadmap(data.roadmap);
-        setScore(data.userResults?.score || 0);
-        setTopic(data.topic);
-        setStep('roadmap');
-      }
+      setAllRoadmaps(data || []);
     } catch (err) {
-      console.log('Failed to fetch latest roadmap', err);
+      console.log('Failed to fetch roadmaps', err);
     }
+  };
+
+  const fetchSkillAchievements = async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/gamification/skill-achievements`, {
+        headers: { Authorization: `Bearer ${backendToken}` }
+      });
+      const data = await res.json();
+      setSkillAchievements(data || []);
+    } catch (err) {
+      console.log('Failed to fetch skill achievements', err);
+    }
+  };
+
+  const selectRoadmap = (rm) => {
+    setAnalysis(rm.analysis);
+    setRoadmap(rm.roadmap);
+    setScore(rm.userResults?.score || 0);
+    setQuestions(rm.testContent || []);
+    setTopic(rm.topic);
+    setStep('roadmap');
   };
 
   const handleGenerateTest = async () => {
@@ -147,12 +178,19 @@ export default function AdaptiveLearningScreen() {
     }
   };
 
-  const renderInput = () => (
+  const renderCreateRoadmap = () => (
     <MotiView
       from={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       style={styles.centerContainer}
     >
+      <TouchableOpacity 
+        style={styles.backButtonTop}
+        onPress={() => setStep('list')}
+      >
+        <ArrowLeft size={24} color="#1e293b" />
+      </TouchableOpacity>
+
       <LinearGradient
         colors={['#6366f1', '#4f46e5']}
         style={styles.iconCircle}
@@ -160,15 +198,15 @@ export default function AdaptiveLearningScreen() {
         <BrainCircuit size={40} color="white" />
       </LinearGradient>
       
-      <Text style={styles.title}>Học tập Thích ứng</Text>
+      <Text style={styles.title}>Lộ trình mới</Text>
       <Text style={styles.subtitle}>
-        AI sẽ tạo lộ trình riêng cho bạn dựa trên kho kiến thức cá nhân.
+        Nhập chủ đề bạn muốn khám phá, AI sẽ xây dựng lộ trình học tập tối ưu cho riêng bạn.
       </Text>
 
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
-          placeholder="Bạn muốn học về chủ đề gì?"
+          placeholder="Ví dụ: Lập trình React cao cấp..."
           placeholderTextColor="#94a3b8"
           value={topic}
           onChangeText={setTopic}
@@ -178,7 +216,7 @@ export default function AdaptiveLearningScreen() {
           onPress={handleGenerateTest}
         >
           <Sparkles size={20} color="white" />
-          <Text style={styles.generateButtonText}>Bắt đầu ngay</Text>
+          <Text style={styles.generateButtonText}>Bắt đầu bài đánh giá</Text>
         </TouchableOpacity>
       </View>
     </MotiView>
@@ -202,6 +240,9 @@ export default function AdaptiveLearningScreen() {
         style={styles.testContainer}
       >
         <View style={styles.progressHeader}>
+          <TouchableOpacity onPress={() => setStep('list')} style={styles.backIconBtn}>
+            <ArrowLeft size={20} color="#64748b" />
+          </TouchableOpacity>
           <Text style={styles.progressText}>Câu {currentQuestionIndex + 1}/{questions.length}</Text>
           <View style={styles.progressBarBg}>
             <MotiView 
@@ -253,6 +294,12 @@ export default function AdaptiveLearningScreen() {
 
   const renderResult = () => (
     <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+      <View style={styles.headerWithBack}>
+        <TouchableOpacity onPress={() => setStep('list')}>
+          <ArrowLeft size={24} color="#1e293b" />
+        </TouchableOpacity>
+      </View>
+
       <MotiView
         from={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -305,14 +352,16 @@ export default function AdaptiveLearningScreen() {
   const renderRoadmap = () => (
     <ScrollView style={styles.container} contentContainerStyle={styles.roadmapPadding}>
       <View style={styles.roadmapHeader}>
-        <Calendar size={24} color="#6366f1" />
+        <TouchableOpacity onPress={() => {
+          fetchAllData();
+          setStep('list');
+        }} style={styles.backIconBtn}>
+          <ArrowLeft size={24} color="#6366f1" />
+        </TouchableOpacity>
         <View style={styles.roadmapHeaderText}>
           <Text style={styles.roadmapTitle}>{topic}</Text>
-          <Text style={styles.roadmapSubtitle}>Lộ trình học tập 7 ngày tới</Text>
+          <Text style={styles.roadmapSubtitle}>Lộ trình học tập chuyên sâu</Text>
         </View>
-        <TouchableOpacity onPress={() => setStep('input')} style={styles.refreshBtn}>
-          <RefreshCcw size={20} color="#94a3b8" />
-        </TouchableOpacity>
       </View>
 
       {roadmap.map((day, idx) => (
@@ -361,10 +410,145 @@ export default function AdaptiveLearningScreen() {
     </ScrollView>
   );
 
+  const renderList = () => (
+    <ScrollView style={styles.container} contentContainerStyle={styles.listPadding}>
+      <View style={styles.mainHeader}>
+        <View>
+          <Text style={styles.welcomeText}>Xin chào,</Text>
+          <Text style={styles.mainTitle}>Lộ trình của bạn</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.createIconButton}
+          onPress={() => {
+            setTopic('');
+            setStep('create');
+          }}
+        >
+          <Sparkles size={20} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Achievement Slider */}
+      <View style={styles.sectionHeader}>
+        <Award size={20} color="#6366f1" />
+        <Text style={styles.sectionTitle}>Thành tựu kỹ năng</Text>
+      </View>
+      
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.achievementSlider}
+        snapToInterval={width * 0.82}
+        decelerationRate="fast"
+      >
+        {skillAchievements.length === 0 ? (
+          <View style={styles.emptyAchiCard}>
+            <Text style={styles.emptyText}>Bắt đầu học để mở khóa thành tựu!</Text>
+          </View>
+        ) : skillAchievements.map((skill, idx) => (
+          <MotiView 
+            key={idx}
+            from={{ opacity: 0, translateX: 50 }}
+            animate={{ opacity: 1, translateX: 0 }}
+            transition={{ delay: idx * 100 }}
+            style={styles.skillCard}
+          >
+            <View style={styles.skillCardHeader}>
+              <View style={styles.skillIconBox}>
+                <BookOpen size={24} color="white" />
+              </View>
+              <View style={styles.skillInfo}>
+                <Text style={styles.skillName}>{skill.name}</Text>
+                <Text style={styles.skillLevel}>Cấp độ: {skill.proficiency >= 80 ? 'Chuyên gia' : skill.proficiency >= 50 ? 'Thành thạo' : 'Đang học'}</Text>
+              </View>
+              <View style={styles.proficiencyBox}>
+                <Text style={styles.proficiencyText}>{skill.proficiency}%</Text>
+              </View>
+            </View>
+
+            <View style={styles.miniProgressBar}>
+              <MotiView 
+                animate={{ width: `${skill.proficiency}%` }}
+                style={styles.miniProgressFill} 
+              />
+            </View>
+
+            <Text style={styles.subSkillLabel}>Kỹ năng con đã học:</Text>
+            <View style={styles.tagCloud}>
+              {(skill.children || []).map((child, cidx) => (
+                <TouchableOpacity key={cidx} style={styles.subSkillTag}>
+                  <Text style={styles.subSkillText}>{child.name}</Text>
+                  <View style={styles.tagProficiency}>
+                    <Text style={styles.tagProficiencyText}>{child.proficiency}%</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </MotiView>
+        ))}
+      </ScrollView>
+
+      {/* Roadmap List */}
+      <View style={styles.sectionHeader}>
+        <Layers size={20} color="#6366f1" />
+        <Text style={styles.sectionTitle}>Lộ trình hiện có</Text>
+      </View>
+
+      {allRoadmaps.length === 0 ? (
+        <TouchableOpacity 
+          style={styles.emptyRoadmapCard}
+          onPress={() => setStep('create')}
+        >
+          <BrainCircuit size={40} color="#94a3b8" />
+          <Text style={styles.emptyRoadmapText}>Bạn chưa có lộ trình nào. Bấm để tạo ngay!</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.roadmapGrid}>
+          {allRoadmaps.map((rm, idx) => (
+            <TouchableOpacity 
+              key={idx} 
+              style={styles.roadmapCard}
+              onPress={() => selectRoadmap(rm)}
+            >
+              <LinearGradient
+                colors={['#f8fafc', '#f1f5f9']}
+                style={styles.roadmapCardInner}
+              >
+                <View style={styles.roadmapCardHeader}>
+                  <Text style={styles.roadmapCardTitle} numberOfLines={1}>{rm.topic}</Text>
+                  <ChevronRight size={20} color="#94a3b8" />
+                </View>
+                <View style={styles.roadmapCardMeta}>
+                  <View style={styles.metaItem}>
+                    <Target size={12} color="#64748b" />
+                    <Text style={styles.metaText}>{rm.userResults?.score}/{rm.userResults?.totalQuestions}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Calendar size={12} color="#64748b" />
+                    <Text style={styles.metaText}>{new Date(rm.createdAt).toLocaleDateString('vi-VN')}</Text>
+                  </View>
+                </View>
+                <View style={styles.roadmapMiniProgress}>
+                  <View style={[styles.miniProgressFill, { width: '100%', opacity: 0.1 }]} />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+
   return (
     <View style={styles.container}>
+      {isLoading && (
+        <View style={styles.globalLoading}>
+          <ActivityIndicator size="large" color="#6366f1" />
+        </View>
+      )}
       <AnimatePresence mode="wait">
-        {step === 'input' && renderInput()}
+        {step === 'list' && renderList()}
+        {step === 'create' && renderCreateRoadmap()}
         {step === 'loading' && renderLoading()}
         {step === 'test' && renderTest()}
         {step === 'result' && renderResult()}
@@ -388,6 +572,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
+  },
+  backButtonTop: {
+    position: 'absolute',
+    top: 60,
+    left: 24,
+    zIndex: 10,
+  },
+  headerWithBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  backIconBtn: {
+    padding: 8,
+    marginRight: 8,
   },
   iconCircle: {
     width: 80,
@@ -652,7 +851,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   roadmapPadding: {
-    padding: 20,
+    padding: 24,
     paddingTop: 60,
     paddingBottom: 40,
   },
@@ -663,10 +862,10 @@ const styles = StyleSheet.create({
   },
   roadmapHeaderText: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 8,
   },
   roadmapTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0f172a',
   },
@@ -674,14 +873,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
   },
-  refreshBtn: {
-    padding: 8,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 12,
-  },
   dayCard: {
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   dayBadge: {
     width: 32,
@@ -757,7 +951,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'between',
+    justifyContent: 'space-between',
   },
   footerLabel: {
     fontSize: 10,
@@ -769,5 +963,243 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: '#fff',
+  },
+  listPadding: {
+    padding: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  mainHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  mainTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  createIconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  achievementSlider: {
+    paddingRight: 24,
+    paddingBottom: 8,
+  },
+  skillCard: {
+    width: width * 0.8,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 20,
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    elevation: 5,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+  },
+  skillCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  skillIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  skillInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  skillName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  skillLevel: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  proficiencyBox: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  proficiencyText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#6366f1',
+  },
+  miniProgressBar: {
+    height: 6,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 3,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  miniProgressFill: {
+    height: '100%',
+    backgroundColor: '#6366f1',
+  },
+  subSkillLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  tagCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  subSkillTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    gap: 6,
+  },
+  subSkillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  tagProficiency: {
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  tagProficiencyText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#6366f1',
+  },
+  emptyAchiCard: {
+    width: width * 0.8,
+    height: 180,
+    backgroundColor: '#f8fafc',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
+  roadmapGrid: {
+    gap: 12,
+  },
+  roadmapCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  roadmapCardInner: {
+    padding: 16,
+  },
+  roadmapCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  roadmapCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+    flex: 1,
+  },
+  roadmapCardMeta: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  roadmapMiniProgress: {
+    height: 4,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  emptyRoadmapCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    backgroundColor: '#f8fafc',
+    borderRadius: 24,
+    borderStyle: 'dashed',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  emptyRoadmapText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#94a3b8',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  globalLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
   },
 });

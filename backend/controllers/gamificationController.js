@@ -1,7 +1,10 @@
 const asyncHandler = require('express-async-handler');
 const Quest = require('../models/Quest');
 const Achievement = require('../models/Achievement');
+const SkillAchievement = require('../models/SkillAchievement');
 const User = require('../models/User');
+const { GoogleGenAI, Type } = require('@google/genai');
+const RAGService = require('../services/RAGService');
 
 // --- User Gamification Stats ---
 const addXP = asyncHandler(async (req, res) => {
@@ -104,8 +107,101 @@ const updateAchievement = asyncHandler(async (req, res) => {
   }
 });
 
+// --- Skill Achievements (New Feature) ---
+
+const getSkillAchievements = asyncHandler(async (req, res) => {
+  const achievements = await SkillAchievement.find({ 
+    userId: req.user._id, 
+    level: 'parent' 
+  }).lean();
+
+  // Attach children to parents for easier frontend rendering
+  const result = await Promise.all(achievements.map(async (parent) => {
+    const children = await SkillAchievement.find({ 
+      userId: req.user._id, 
+      parentId: parent._id 
+    }).lean();
+    return { ...parent, children };
+  }));
+
+  res.json(result);
+});
+
+// Background internal function to sync skills based on RAG knowledge
+const syncSkillAchievementsInternal = async (userId, topic, analysis, req) => {
+  try {
+    const apiKey = req.headers['x-gemini-api-key'] || process.env.GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    const ai = new GoogleGenAI(apiKey);
+    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    // Retrieve full RAG context for this user & topic to assess depth
+    const contextResults = await RAGService.retrieve(topic, userId.toString(), { limit: 15 });
+    const contextString = RAGService.formatContext(contextResults);
+
+    const prompt = `Assess the user's proficiency in "${topic}" based on their learning history and this RAG context:\n${contextString}\n\nAnalysis from test: ${JSON.stringify(analysis)}\n\nOutput a JSON object with:
+    {
+      "parentSkill": "Main category (e.g., Programming)",
+      "childSkill": "Specific skill (e.g., React)",
+      "proficiency": (0-100),
+      "reasoning": "Brief explanation",
+      "masteredTopics": ["Topic 1", "Topic 2"]
+    }`;
+
+    const response = await model.generateContent(prompt);
+    const text = response.response.text().replace(/```json|```/g, '').trim();
+    const data = JSON.parse(text);
+
+    // 1. Ensure Parent exists
+    let parent = await SkillAchievement.findOne({ userId, name: data.parentSkill, level: 'parent' });
+    if (!parent) {
+      parent = await SkillAchievement.create({
+        userId,
+        name: data.parentSkill,
+        level: 'parent',
+        proficiency: data.proficiency // Initial proficiency
+      });
+    }
+
+    // 2. Ensure Child exists
+    let child = await SkillAchievement.findOne({ userId, name: data.childSkill, parentId: parent._id });
+    if (!child) {
+      child = await SkillAchievement.create({
+        userId,
+        name: data.childSkill,
+        parentId: parent._id,
+        level: 'child',
+        proficiency: data.proficiency,
+        masteredTopics: data.masteredTopics.map(t => ({ topic: t, depth: 'deep', completedAt: new Date() }))
+      });
+    } else {
+      // Update child proficiency and topics
+      child.proficiency = data.proficiency;
+      data.masteredTopics.forEach(t => {
+        if (!child.masteredTopics.some(mt => mt.topic === t)) {
+          child.masteredTopics.push({ topic: t, depth: 'deep', completedAt: new Date() });
+        }
+      });
+      child.lastExploredAt = new Date();
+      await child.save();
+    }
+
+    // 3. Recalculate Parent proficiency (average of children)
+    const children = await SkillAchievement.find({ userId, parentId: parent._id });
+    const avgProficiency = Math.round(children.reduce((acc, curr) => acc + curr.proficiency, 0) / children.length);
+    parent.proficiency = avgProficiency;
+    await parent.save();
+
+    console.log(`[SkillSync] Synced skill "${data.childSkill}" for user ${userId}`);
+  } catch (error) {
+    console.error('[SkillSync] Error during background sync:', error);
+  }
+};
+
 module.exports = {
   addXP, updateRank,
   getQuests, createQuest, updateQuest, deleteQuest,
-  getAchievements, createAchievement, updateAchievement
+  getAchievements, createAchievement, updateAchievement,
+  getSkillAchievements, syncSkillAchievementsInternal
 };

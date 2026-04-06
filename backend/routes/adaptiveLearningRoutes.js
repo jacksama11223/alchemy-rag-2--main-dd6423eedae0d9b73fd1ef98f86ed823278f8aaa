@@ -12,6 +12,9 @@ router.post('/generate-test', adaptiveLearningController.generateTest);
 // POST submit test answers and generate roadmap
 router.post('/submit-test', adaptiveLearningController.submitTest);
 
+// GET all completed roadmaps
+router.get('/all-roadmaps', adaptiveLearningController.getAllRoadmaps);
+
 // GET the latest completed roadmap
 router.get('/roadmap', adaptiveLearningController.getLatestRoadmap);
 

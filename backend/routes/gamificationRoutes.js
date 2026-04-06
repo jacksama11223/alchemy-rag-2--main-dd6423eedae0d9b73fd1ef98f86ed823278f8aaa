@@ -4,7 +4,8 @@ const { protect } = require('../middleware/authMiddleware');
 const {
   addXP, updateRank,
   getQuests, createQuest, updateQuest, deleteQuest,
-  getAchievements, createAchievement, updateAchievement
+  getAchievements, createAchievement, updateAchievement,
+  getSkillAchievements
 } = require('../controllers/gamificationController');
 
 router.route('/xp').post(protect, addXP);
@@ -15,5 +16,7 @@ router.route('/quests/:id').put(protect, updateQuest).delete(protect, deleteQues
 
 router.route('/achievements').get(protect, getAchievements).post(protect, createAchievement);
 router.route('/achievements/:id').put(protect, updateAchievement);
+
+router.route('/skill-achievements').get(protect, getSkillAchievements);
 
 module.exports = router;
