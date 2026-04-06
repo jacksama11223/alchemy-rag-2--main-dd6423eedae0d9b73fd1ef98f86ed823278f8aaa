@@ -206,6 +206,7 @@ app.use('/api/rag', require('./routes/ragRoutes'));
 app.use('/api/global-knowledge', require('./routes/globalKnowledgeRoutes'));
 app.use('/api/user-memory', require('./routes/userMemoryRoutes'));
 app.use('/api/roadmap', require('./routes/roadmapRoutes'));
+app.use('/api/adaptive', require('./routes/adaptiveLearningRoutes'));
 app.use('/api/drive-authoring', require('./routes/driveAuthoringRoutes'));
 
 // Initialize IMAP Listener

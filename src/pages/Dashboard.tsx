@@ -17,7 +17,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, FileText, BookOpen } from 'lucide-react';
+import { GripVertical, FileText, BookOpen, BrainCircuit } from 'lucide-react';
+import { AdaptiveLearningRoadmap } from '../components/AdaptiveLearningRoadmap';
 
 // Sortable Item Component
 function SortableWidget({ id, children, isCustomizing }: { id: string; children: React.ReactNode; isCustomizing: boolean }) {
@@ -45,7 +46,8 @@ function SortableWidget({ id, children, isCustomizing }: { id: string; children:
         <h3 className="font-semibold text-gray-900 dark:text-white flex items-center">
           {id === 'notes' && <FileText className="w-4 h-4 mr-2 text-indigo-500" />}
           {id === 'flashcards' && <BookOpen className="w-4 h-4 mr-2 text-emerald-500" />}
-          {id === 'notes' ? 'Recent Notes' : 'Today\'s Review'}
+          {id === 'adaptive' && <BrainCircuit className="w-4 h-4 mr-2 text-indigo-500" />}
+          {id === 'notes' ? 'Recent Notes' : id === 'flashcards' ? 'Today\'s Review' : 'Lộ trình học tập'}
         </h3>
       </div>
       <div className="p-4">
@@ -57,9 +59,9 @@ function SortableWidget({ id, children, isCustomizing }: { id: string; children:
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [widgets, setWidgets] = useState(['notes', 'flashcards']);
+  const [widgets, setWidgets] = useState(['adaptive', 'notes', 'flashcards']);
   const [isCustomizing, setIsCustomizing] = useState(false);
-  const [originalWidgets, setOriginalWidgets] = useState(['notes', 'flashcards']);
+  const [originalWidgets, setOriginalWidgets] = useState(['adaptive', 'notes', 'flashcards']);
 
   const sensors = useSensors(
     useSensor(PointerSensor),

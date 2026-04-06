@@ -25,7 +25,7 @@ import OnboardingScreen from '../screens/OnboardingScreen';
 // New feature screens
 import ChatbotScreen from '../screens/ChatbotScreen';
 import NoteLabScreen from '../screens/NoteLabScreen';
-import GraphScreen from '../screens/GraphScreen';
+import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 // Alchemy (existing mobile component)
@@ -39,7 +39,7 @@ const TAB_ICONS = {
   Dashboard: Home,
   Alchemy: FlaskConical,
   Chat: MessageCircle,
-  Graph: Brain,
+  Adaptive: Brain,
   NoteLab: NotebookPen,
   Profile: User,
 };
@@ -94,9 +94,9 @@ function MainTabs() {
         options={{ tabBarLabel: 'Chatbot' }}
       />
       <Tab.Screen
-        name="Graph"
-        component={GraphScreen}
-        options={{ tabBarLabel: 'Sơ đồ' }}
+        name="Adaptive"
+        component={AdaptiveLearningScreen}
+        options={{ tabBarLabel: 'Lộ trình' }}
       />
       <Tab.Screen
         name="NoteLab"
