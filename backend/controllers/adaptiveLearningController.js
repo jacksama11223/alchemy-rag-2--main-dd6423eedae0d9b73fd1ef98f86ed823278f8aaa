@@ -163,6 +163,22 @@ exports.generateTest = async (req, res) => {
   }
 };
 
+const formatRoadmapToText = (topic, roadmap, analysis) => {
+  let text = `LỘ TRÌNH HỌC TẬP THÍCH ỨNG (AI): ${topic.toUpperCase()}\n\n`;
+  text += `ĐÁNH GIÁ NĂNG LỰC:\n- Điểm mạnh: ${analysis.strong_tags.join(', ')}\n- Cần cải thiện: ${analysis.weak_tags.join(', ')}\n\n`;
+  text += `KẾ HOẠCH CHI TIẾT 7 NGÀY:\n`;
+  
+  roadmap.forEach(day => {
+    text += `\n[Ngày ${day.day}: ${day.title}]\n`;
+    text += `Nội dung: ${day.description}\n`;
+    if (day.resources && day.resources.length > 0) {
+      text += `Tài liệu: ${day.resources.map(r => `${r.title} (${r.type})`).join(', ')}\n`;
+    }
+  });
+  
+  return text;
+};
+
 exports.submitTest = async (req, res) => {
   try {
     const { sessionId, answers } = req.body;
@@ -198,14 +214,21 @@ exports.submitTest = async (req, res) => {
     session.status = 'completed';
     await session.save();
 
-    // Sync Roadmap to RAG (Chatbot) - Wrap in try/catch to avoid crashing if sync fails
+    // Sync Roadmap to RAG (Chatbot) - Using human-readable summary for better search results
     try {
+      const humanReadableRoadmap = formatRoadmapToText(session.topic, session.roadmap, session.analysis);
+      
       await syncToRag({
         userId,
-        text: `Lộ trình học tập thích ứng chủ đề ${session.topic}:\n${JSON.stringify(session.roadmap, null, 2)}\n\nĐiểm yếu: ${session.analysis.weak_tags.join(', ')}`,
+        text: humanReadableRoadmap,
         title: `Lộ trình: ${session.topic}`,
         sourceType: 'roadmap',
-        metadata: { topic: session.topic, score: `${score}/${session.testContent.length}`, isAiGenerated: true }
+        metadata: { 
+          topic: session.topic, 
+          score: `${score}/${session.testContent.length}`, 
+          isAiGenerated: true,
+          originalRoadmapJson: JSON.stringify(session.roadmap) // Keep JSON as backup in metadata
+        }
       });
     } catch (ragError) {
       console.error('[RAGSync] Error in background sync:', ragError);

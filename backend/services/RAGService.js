@@ -156,6 +156,7 @@ class RAGService {
       else if (sType === 'youtube') label = 'VIDEO YOUTUBE';
       else if (sType === 'web') label = 'TRANG WEB';
       else if (sType === 'voice') label = 'GHI ÂM GIỌNG NÓI';
+      else if (sType === 'roadmap') label = 'LỘ TRÌNH HỌC TẬP AI';
 
       const title = doc.metadata?.title || 'Không tiêu đề';
       
