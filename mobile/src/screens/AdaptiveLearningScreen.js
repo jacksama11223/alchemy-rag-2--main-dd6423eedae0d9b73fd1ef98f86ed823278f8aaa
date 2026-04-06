@@ -141,17 +141,34 @@ export default function AdaptiveLearningScreen() {
           text: 'Xóa', 
           style: 'destructive',
           onPress: async () => {
+            console.log('[RoadmapDelete] Attempting to delete ID:', id);
             try {
               const res = await fetch(`${backendUrl}/api/adaptive/roadmap/${id}`, {
                 method: 'DELETE',
-                headers: { Authorization: `Bearer ${backendToken}` }
+                headers: { 
+                  'Authorization': `Bearer ${backendToken}`,
+                  'Content-Type': 'application/json'
+                }
               });
+              const textResponse = await res.text();
+              console.log('[RoadmapDelete] Status:', res.status, 'Body:', textResponse);
+              
+              let data = {};
+              try { data = JSON.parse(textResponse); } catch (e) {}
+
               if (res.ok) {
                 Toast.show({ type: 'success', text1: 'Đã xóa lộ trình' });
                 fetchRoadmaps();
+              } else {
+                Toast.show({ 
+                  type: 'error', 
+                  text1: 'Lỗi', 
+                  text2: data.message || `Lỗi server (${res.status})`
+                });
               }
             } catch (err) {
-              Toast.show({ type: 'error', text1: 'Lỗi', text2: 'Không thể xóa' });
+              console.error('[RoadmapDelete] Fetch error:', err);
+              Toast.show({ type: 'error', text1: 'Lỗi kết nối', text2: 'Vui lòng kiểm tra mạng' });
             }
           }
         }
@@ -602,7 +619,7 @@ export default function AdaptiveLearningScreen() {
                 <TouchableOpacity 
                   style={styles.actionBtn}
                   onPress={() => {
-                    setSelectedRoadmapId(rm._id);
+                    setSelectedRoadmapId(rm._id || rm.id);
                     setRenameText(rm.topic);
                     setIsRenaming(true);
                   }}
@@ -611,7 +628,7 @@ export default function AdaptiveLearningScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.actionBtn, styles.deleteBtn]}
-                  onPress={() => handleDeleteRoadmap(rm._id)}
+                  onPress={() => handleDeleteRoadmap(rm._id || rm.id)}
                 >
                   <Trash2 size={16} color="#ef4444" />
                 </TouchableOpacity>

@@ -309,10 +309,16 @@ exports.deleteRoadmap = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user._id;
+    console.log(`[DELETE] Roadmap ID: ${id} | User ID: ${userId}`);
 
     const roadmap = await AdaptiveLearning.findOneAndDelete({ _id: id, userId });
     
-    if (!roadmap) return res.status(404).json({ message: 'Roadmap not found' });
+    if (!roadmap) {
+      console.warn(`[DELETE] Roadmap not found or unauthorized: ${id}`);
+      return res.status(404).json({ message: 'Không tìm thấy lộ trình hoặc không có quyền xóa' });
+    }
+
+    console.log(`[DELETE] Successfully deleted roadmap: ${id}`);
 
     res.status(200).json({ message: 'Roadmap deleted successfully' });
   } catch (error) {
