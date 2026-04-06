@@ -281,3 +281,42 @@ exports.getAllRoadmaps = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch roadmaps' });
   }
 };
+
+exports.renameRoadmap = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { topic } = req.body;
+    const userId = req.user._id;
+
+    if (!topic) return res.status(400).json({ message: 'Topic is required' });
+
+    const roadmap = await AdaptiveLearning.findOneAndUpdate(
+      { _id: id, userId },
+      { topic },
+      { new: true }
+    );
+
+    if (!roadmap) return res.status(404).json({ message: 'Roadmap not found' });
+
+    res.status(200).json(roadmap);
+  } catch (error) {
+    console.error('Error renaming roadmap:', error);
+    res.status(500).json({ message: 'Failed to rename roadmap' });
+  }
+};
+
+exports.deleteRoadmap = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    const roadmap = await AdaptiveLearning.findOneAndDelete({ _id: id, userId });
+    
+    if (!roadmap) return res.status(404).json({ message: 'Roadmap not found' });
+
+    res.status(200).json({ message: 'Roadmap deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting roadmap:', error);
+    res.status(500).json({ message: 'Failed to delete roadmap' });
+  }
+};

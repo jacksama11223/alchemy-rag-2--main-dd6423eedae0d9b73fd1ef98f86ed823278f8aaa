@@ -18,4 +18,10 @@ router.get('/all-roadmaps', adaptiveLearningController.getAllRoadmaps);
 // GET the latest completed roadmap
 router.get('/roadmap', adaptiveLearningController.getLatestRoadmap);
 
+// PATCH rename a roadmap
+router.patch('/rename-roadmap/:id', adaptiveLearningController.renameRoadmap);
+
+// DELETE a roadmap
+router.delete('/roadmap/:id', adaptiveLearningController.deleteRoadmap);
+
 module.exports = router;

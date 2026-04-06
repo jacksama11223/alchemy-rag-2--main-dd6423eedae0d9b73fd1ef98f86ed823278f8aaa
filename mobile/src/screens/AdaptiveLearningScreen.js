@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  Alert,
+  Modal,
 } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,7 +31,11 @@ import {
   Award,
   BookOpen,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Trash2,
+  Edit3,
+  Check,
+  X
 } from 'lucide-react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useApiKey } from '../context/ApiKeyContext';
@@ -52,6 +58,9 @@ export default function AdaptiveLearningScreen() {
   const [allRoadmaps, setAllRoadmaps] = useState([]);
   const [skillAchievements, setSkillAchievements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameText, setRenameText] = useState('');
+  const [selectedRoadmapId, setSelectedRoadmapId] = useState(null);
 
   useEffect(() => {
     if (backendToken) {
@@ -99,6 +108,55 @@ export default function AdaptiveLearningScreen() {
     setQuestions(rm.testContent || []);
     setTopic(rm.topic);
     setStep('roadmap');
+  };
+
+  const handleRenameRoadmap = async () => {
+    if (!renameText.trim()) return;
+    try {
+      const res = await fetch(`${backendUrl}/api/adaptive/rename-roadmap/${selectedRoadmapId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${backendToken}`
+        },
+        body: JSON.stringify({ topic: renameText })
+      });
+      if (res.ok) {
+        Toast.show({ type: 'success', text1: 'Đã đổi tên lộ trình' });
+        setIsRenaming(false);
+        fetchRoadmaps();
+      }
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Lỗi', text2: 'Không thể đổi tên' });
+    }
+  };
+
+  const handleDeleteRoadmap = (id) => {
+    Alert.alert(
+      'Xóa lộ trình',
+      'Bạn có chắc chắn muốn xóa lộ trình này không?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { 
+          text: 'Xóa', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await fetch(`${backendUrl}/api/adaptive/roadmap/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${backendToken}` }
+              });
+              if (res.ok) {
+                Toast.show({ type: 'success', text1: 'Đã xóa lộ trình' });
+                fetchRoadmaps();
+              }
+            } catch (err) {
+              Toast.show({ type: 'error', text1: 'Lỗi', text2: 'Không thể xóa' });
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleGenerateTest = async () => {
@@ -503,38 +561,64 @@ export default function AdaptiveLearningScreen() {
           <Text style={styles.emptyRoadmapText}>Bạn chưa có lộ trình nào. Bấm để tạo ngay!</Text>
         </TouchableOpacity>
       ) : (
-        <View style={styles.roadmapGrid}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.roadmapSlider}
+          snapToInterval={width * 0.82}
+          decelerationRate="fast"
+        >
           {allRoadmaps.map((rm, idx) => (
-            <TouchableOpacity 
-              key={idx} 
-              style={styles.roadmapCard}
-              onPress={() => selectRoadmap(rm)}
-            >
-              <LinearGradient
-                colors={['#f8fafc', '#f1f5f9']}
-                style={styles.roadmapCardInner}
+            <View key={rm._id || idx} style={styles.roadmapCardContainer}>
+              <TouchableOpacity 
+                style={styles.roadmapCard}
+                onPress={() => selectRoadmap(rm)}
               >
-                <View style={styles.roadmapCardHeader}>
-                  <Text style={styles.roadmapCardTitle} numberOfLines={1}>{rm.topic}</Text>
-                  <ChevronRight size={20} color="#94a3b8" />
-                </View>
-                <View style={styles.roadmapCardMeta}>
-                  <View style={styles.metaItem}>
-                    <Target size={12} color="#64748b" />
-                    <Text style={styles.metaText}>{rm.userResults?.score}/{rm.userResults?.totalQuestions}</Text>
+                <LinearGradient
+                  colors={['#f8fafc', '#f1f5f9']}
+                  style={styles.roadmapCardInner}
+                >
+                  <View style={styles.roadmapCardHeader}>
+                    <Text style={styles.roadmapCardTitle} numberOfLines={1}>{rm.topic}</Text>
+                    <ChevronRight size={20} color="#94a3b8" />
                   </View>
-                  <View style={styles.metaItem}>
-                    <Calendar size={12} color="#64748b" />
-                    <Text style={styles.metaText}>{new Date(rm.createdAt).toLocaleDateString('vi-VN')}</Text>
+                  <View style={styles.roadmapCardMeta}>
+                    <View style={styles.metaItem}>
+                      <Target size={12} color="#64748b" />
+                      <Text style={styles.metaText}>{rm.userResults?.score}/{rm.userResults?.totalQuestions}</Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                      <Calendar size={12} color="#64748b" />
+                      <Text style={styles.metaText}>{new Date(rm.createdAt).toLocaleDateString('vi-VN')}</Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.roadmapMiniProgress}>
-                  <View style={[styles.miniProgressFill, { width: '100%', opacity: 0.1 }]} />
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                  <View style={styles.roadmapMiniProgress}>
+                    <View style={[styles.miniProgressFill, { width: '100%', opacity: 0.1 }]} />
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              <View style={styles.cardActions}>
+                <TouchableOpacity 
+                  style={styles.actionBtn}
+                  onPress={() => {
+                    setSelectedRoadmapId(rm._id);
+                    setRenameText(rm.topic);
+                    setIsRenaming(true);
+                  }}
+                >
+                  <Edit3 size={16} color="#6366f1" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.deleteBtn]}
+                  onPress={() => handleDeleteRoadmap(rm._id)}
+                >
+                  <Trash2 size={16} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            </View>
           ))}
-        </View>
+        </ScrollView>
       )}
     </ScrollView>
   );
@@ -554,6 +638,44 @@ export default function AdaptiveLearningScreen() {
         {step === 'result' && renderResult()}
         {step === 'roadmap' && renderRoadmap()}
       </AnimatePresence>
+
+      <Modal
+        visible={isRenaming}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsRenaming(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <MotiView 
+            from={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            style={styles.modalContent}
+          >
+            <Text style={styles.modalTitle}>Đổi tên lộ trình</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={renameText}
+              onChangeText={setRenameText}
+              autoFocus
+              placeholder="Nhập tên mới..."
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.modalCancel}
+                onPress={() => setIsRenaming(false)}
+              >
+                <Text style={styles.cancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalConfirm}
+                onPress={handleRenameRoadmap}
+              >
+                <Text style={styles.confirmText}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </MotiView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1133,14 +1255,25 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontWeight: '600',
   },
-  roadmapGrid: {
-    gap: 12,
+  roadmapSlider: {
+    paddingRight: 24,
+    paddingBottom: 20,
+  },
+  roadmapCardContainer: {
+    width: width * 0.8,
+    marginRight: 16,
   },
   roadmapCard: {
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#f1f5f9',
+    backgroundColor: '#fff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   roadmapCardInner: {
     padding: 16,
@@ -1201,5 +1334,79 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 12,
+  },
+  actionBtn: {
+    padding: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+  },
+  deleteBtn: {
+    backgroundColor: '#fef2f2',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 20,
+  },
+  modalInput: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#1e293b',
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancel: {
+    flex: 1,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+  },
+  modalConfirm: {
+    flex: 1,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+  },
+  cancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  confirmText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
