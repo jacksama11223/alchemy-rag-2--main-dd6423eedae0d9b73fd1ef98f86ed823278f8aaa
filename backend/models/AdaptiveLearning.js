@@ -1,5 +1,11 @@
 const mongoose = require('mongoose');
 
+const resourceSchema = new mongoose.Schema({
+  title: String,
+  link: String,
+  type: String
+}, { _id: false });
+
 const adaptiveLearningSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -38,11 +44,7 @@ const adaptiveLearningSchema = new mongoose.Schema({
     day: Number,
     title: String,
     tasks: [String],
-    resources: [{
-      title: String,
-      link: String,
-      type: String
-    }],
+    resources: [resourceSchema],
     isCompleted: { type: Boolean, default: false }
   }],
   status: {

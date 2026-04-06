@@ -1,6 +1,6 @@
+const { GoogleGenAI, Type } = require('@google/genai');
 const AdaptiveLearning = require('../models/AdaptiveLearning');
 const RAGService = require('../services/RAGService');
-const { GoogleGenAI } = require('@google/genai');
 const { syncToRag } = require('../utils/ragSync');
 
 // Helper to get Gemini AI instance
@@ -12,20 +12,120 @@ const getAI = (req) => {
   return new GoogleGenAI({ apiKey });
 };
 
-// Retry helper for API Rate Limits (RPM)
-const generateWithRetry = async (ai, model, prompt, maxRetries = 3) => {
+// --- RESPONSE SCHEMAS ---
+
+const testSchema = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      question: { type: Type.STRING },
+      options: { type: Type.ARRAY, items: { type: Type.STRING } },
+      correctAnswer: { type: Type.STRING },
+      explanation: { type: Type.STRING },
+      tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+    },
+    required: ["question", "options", "correctAnswer", "explanation", "tags"]
+  }
+};
+
+const analysisSchema = {
+  type: Type.OBJECT,
+  properties: {
+    analysis: {
+      type: Type.OBJECT,
+      properties: {
+        weak_tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+        strong_tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+        aiSummary: { type: Type.STRING }
+      },
+      required: ["weak_tags", "strong_tags", "aiSummary"]
+    },
+    roadmap: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          day: { type: Type.NUMBER },
+          title: { type: Type.STRING },
+          tasks: { type: Type.ARRAY, items: { type: Type.STRING } },
+          resources: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                link: { type: Type.STRING },
+                type: { type: Type.STRING }
+              },
+              required: ["title", "link", "type"]
+            }
+          }
+        },
+        required: ["day", "title", "tasks", "resources"]
+      }
+    }
+  },
+  required: ["analysis", "roadmap"]
+};
+
+// --- HELPERS ---
+
+const smartParse = (input) => {
+  if (!input || typeof input !== 'string') return input;
+  let cleaned = input.replace(/```json|```/g, '').trim();
+  try { return JSON.parse(cleaned); } catch (e) {
+    try {
+      // Fix single quotes for common AI pseudo-JSON
+      let fixed = cleaned
+        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')
+        .replace(/: \s*'([^']*)'/g, ': "$1"')
+        .replace(/,\s*'([^']*)'/g, ', "$1"')
+        .replace(/\[\s*'([^']*)'/g, '["$1"');
+      return JSON.parse(fixed);
+    } catch (e2) { return null; }
+  }
+};
+
+const deepSanitize = (data) => {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.map(deepSanitize);
+  if (typeof data === 'object') {
+    const newData = {};
+    for (const key in data) {
+      let val = data[key];
+      // If we find a string that looks like a JSON array/object where we expect one, parse it
+      if (typeof val === 'string' && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
+        const parsed = smartParse(val);
+        if (parsed) val = parsed;
+      }
+      newData[key] = deepSanitize(val);
+    }
+    return newData;
+  }
+  return data;
+};
+
+// Retry helper for API Rate Limits (RPM) with Schema support
+const generateWithRetry = async (ai, model, prompt, schema = null, maxRetries = 3) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      const config = {};
+      if (schema) {
+        config.responseMimeType = "application/json";
+        config.responseSchema = schema;
+      }
+
       const response = await ai.models.generateContent({
         model: model,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: config
       });
       return response;
     } catch (error) {
-      // Check for rate limit error (429)
       if ((error.status === 429 || error.message?.includes('429')) && attempt < maxRetries) {
         const delay = Math.pow(2, attempt) * 1000;
-        console.warn(`[Gemini] Rate limit hit. Retrying in ${delay}ms (Attempt ${attempt}/${maxRetries})...`);
+        console.warn(`[Gemini] Rate limit hit. Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -39,64 +139,24 @@ exports.generateTest = async (req, res) => {
     const { topic } = req.body;
     const userId = req.user._id;
 
-    if (!topic) {
-      return res.status(400).json({ message: 'Topic is required' });
-    }
+    if (!topic) return res.status(400).json({ message: 'Topic is required' });
 
-    // 1. Retrieve context from RAG based on the topic
     const contextResults = await RAGService.retrieve(topic, userId.toString(), { limit: 10 });
     const contextString = RAGService.formatContext(contextResults);
-
-    // 2. Use Gemini to generate a test
     const ai = getAI(req);
     
-    const prompt = `
-      You are an expert tutor. Based on the following context retrieved from the user's personal knowledge base, 
-      create a challenging multiple-choice test about "${topic}".
-      
-      CONTEXT:
-      ${contextString}
-      
-      REQUIREMENTS:
-      1. Generate 5-10 multiple-choice questions.
-      2. Each question must have exactly 4 options.
-      3. Specify the correct answer for each question.
-      4. Provide a brief explanation for why the answer is correct.
-      5. Categorize each question with relevant tags (e.g., ["Basics", "Advanced", "Logic"]).
-      6. Return ONLY a valid JSON array of objects.
-      
-      JSON FORMAT:
-      [
-        {
-          "question": "Question text here?",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "correctAnswer": "Option A",
-          "explanation": "Explanation here.",
-          "tags": ["Tag1", "Tag2"]
-        }
-      ]
-    `;
+    const prompt = `Create a challenging 5-10 question multiple-choice test about "${topic}" based on this context:\n${contextString}`;
 
-    const response = await generateWithRetry(ai, 'gemini-3-flash-preview', prompt);
-    const text = response.text;
+    const response = await generateWithRetry(ai, 'gemini-3-flash-preview', prompt, testSchema);
     
-    // Clean JSON response (handle markdown code blocks)
-    let jsonStr = text.replace(/```json|```/g, '').trim();
-    const testContent = JSON.parse(jsonStr);
+    let testContent = smartParse(response.text);
+    if (!testContent || !Array.isArray(testContent)) {
+      throw new Error('AI generated invalid test format');
+    }
 
-    // 3. Save to database
-    const newSession = new AdaptiveLearning({
-      userId,
-      topic,
-      testContent,
-      status: 'testing'
-    });
+    const newSession = new AdaptiveLearning({ userId, topic, testContent, status: 'testing' });
     await newSession.save();
-
-    res.status(201).json({ 
-      sessionId: newSession._id,
-      testContent 
-    });
+    res.status(201).json({ sessionId: newSession._id, testContent });
   } catch (error) {
     console.error('Error generating adaptive test:', error);
     res.status(500).json({ message: 'Failed to generate test', error: error.message });
@@ -105,138 +165,56 @@ exports.generateTest = async (req, res) => {
 
 exports.submitTest = async (req, res) => {
   try {
-    const { sessionId, answers } = req.body; // answers: [{ questionIndex, selectedAnswer }]
+    const { sessionId, answers } = req.body;
     const userId = req.user._id;
-
     const session = await AdaptiveLearning.findOne({ _id: sessionId, userId });
-    if (!session) {
-      return res.status(404).json({ message: 'Session not found' });
-    }
+    if (!session) return res.status(404).json({ message: 'Session not found' });
 
-    // 1. Calculate Results
     let score = 0;
-    const evaluatedAnswers = session.testContent.map((q, index) => {
-      const userAnswer = answers.find(a => a.questionIndex === index);
+    const evaluatedAnswers = (session.testContent || []).map((q, index) => {
+      const userAnswer = (answers || []).find(a => a.questionIndex === index);
       const isCorrect = userAnswer && userAnswer.selectedAnswer === q.correctAnswer;
       if (isCorrect) score++;
-      return {
-        questionIndex: index,
-        selectedAnswer: userAnswer ? userAnswer.selectedAnswer : null,
-        isCorrect,
-        timestamp: new Date()
-      };
+      return { questionIndex: index, selectedAnswer: userAnswer?.selectedAnswer || null, isCorrect, timestamp: new Date() };
     });
 
-    session.userResults = {
-      score,
-      totalQuestions: session.testContent.length,
-      answers: evaluatedAnswers,
-      completedAt: new Date()
-    };
+    session.userResults = { score, totalQuestions: session.testContent.length, answers: evaluatedAnswers, completedAt: new Date() };
 
-    // 2. Analyze weak/strong points using Gemini
     const ai = getAI(req);
+    const analysisPrompt = `Analyze test results for "${session.topic}" and create a 7-day roadmap.\nTEST DATA: ${JSON.stringify({ questions: session.testContent.map(q => ({ question: q.question, tags: q.tags })), results: evaluatedAnswers })}`;
 
-    const analysisPrompt = `
-      Analyze this user's test results for the topic "${session.topic}".
-      
-      TEST DATA:
-      ${JSON.stringify({
-        questions: session.testContent.map(q => ({ question: q.question, tags: q.tags })),
-        results: evaluatedAnswers
-      })}
-      
-      TASK:
-      1. Identify "strong_tags" (tags where user got questions right).
-      2. Identify "weak_tags" (tags where user got questions wrong).
-      3. Provide a brief 2-sentence summary of their performance.
-      4. Generate a 7-day adaptive learning roadmap to fix the weaknesses.
-      5. Each roadmap day must be an object containing: "day" (number), "title" (string), "tasks" (array of strings), and "resources" (an ARRAY of objects, NOT a string).
-      
-      RETURN ONLY VALID JSON IN THIS FORMAT:
-      {
-        "analysis": {
-          "weak_tags": ["tag1", "tag2"],
-          "strong_tags": ["tag3"],
-          "aiSummary": "Summary here."
-        },
-        "roadmap": [
-          {
-            "day": 1,
-            "title": "Topic Day 1",
-            "tasks": ["Task A", "Task B"],
-            "resources": [
-              {
-                "title": "Resource Name",
-                "link": "/notes/...",
-                "type": "note"
-              }
-            ]
-          }
-        ]
-      }
-    `;
-
-    const analysisResponse = await generateWithRetry(ai, 'gemini-3-flash-preview', analysisPrompt);
-    const analysisText = analysisResponse.text;
+    const analysisResponse = await generateWithRetry(ai, 'gemini-3-flash-preview', analysisPrompt, analysisSchema);
     
-    // Clean and parse JSON response
-    let analysisData;
-    try {
-      const jsonStr = analysisText.replace(/```json|```/g, '').trim();
-      analysisData = JSON.parse(jsonStr);
-      
-      // Sanitization for robustness: Handle cases where AI returns resources as a string
-      if (analysisData.roadmap && Array.isArray(analysisData.roadmap)) {
-        analysisData.roadmap = analysisData.roadmap.map(day => {
-          // If resources is a string, try to parse it
-          if (typeof day.resources === 'string') {
-            try {
-              day.resources = JSON.parse(day.resources);
-            } catch (e) {
-              console.warn('Failed to parse resources string from AI:', day.resources);
-              day.resources = [];
-            }
-          }
-          // Ensure it's an array for Mongoose
-          if (!Array.isArray(day.resources)) {
-            day.resources = [];
-          }
-          return day;
-        });
-      }
-    } catch (parseError) {
-      console.error('Failed to parse AI analysis result:', parseError);
-      throw new Error('AI generated invalid format. Please try again.');
+    let analysisData = smartParse(analysisResponse.text);
+    if (!analysisData || !analysisData.roadmap) {
+       throw new Error('Failed to generate roadmap analysis');
     }
 
-    session.analysis = analysisData.analysis;
-    session.roadmap = analysisData.roadmap;
+    // AGGRESSIVE DEEP RECURSIVE SANITIZATION
+    const sanitizedData = deepSanitize(analysisData);
+
+    session.analysis = sanitizedData.analysis;
+    session.roadmap = sanitizedData.roadmap;
     session.status = 'completed';
     await session.save();
 
-    // 3. Sync Roadmap and Weaknesses to RAG for future retrieval
-    await syncToRag({
-      userId,
-      text: `Lộ trình học tập thích ứng chủ đề ${session.topic}:\n${JSON.stringify(session.roadmap, null, 2)}\n\nĐiểm yếu cần cải thiện: ${session.analysis.weak_tags.join(', ')}`,
-      title: `Lộ trình: ${session.topic}`,
-      sourceType: 'roadmap',
-      metadata: {
-        topic: session.topic,
-        score: `${score}/${session.testContent.length}`,
-        isAiGenerated: true
-      }
-    });
+    // Sync Roadmap to RAG (Chatbot) - Wrap in try/catch to avoid crashing if sync fails
+    try {
+      await syncToRag({
+        userId,
+        text: `Lộ trình học tập thích ứng chủ đề ${session.topic}:\n${JSON.stringify(session.roadmap, null, 2)}\n\nĐiểm yếu: ${session.analysis.weak_tags.join(', ')}`,
+        title: `Lộ trình: ${session.topic}`,
+        sourceType: 'roadmap',
+        metadata: { topic: session.topic, score: `${score}/${session.testContent.length}`, isAiGenerated: true }
+      });
+    } catch (ragError) {
+      console.error('[RAGSync] Error in background sync:', ragError);
+    }
 
-    res.status(200).json({
-      score,
-      totalQuestions: session.testContent.length,
-      analysis: session.analysis,
-      roadmap: session.roadmap
-    });
+    res.status(200).json({ score, totalQuestions: session.testContent.length, analysis: session.analysis, roadmap: session.roadmap });
   } catch (error) {
     console.error('Error submitting test:', error);
-    res.status(500).json({ message: 'Failed to process test results', error: error.message });
+    res.status(500).json({ message: 'Failed to process results', error: error.message });
   }
 };
 

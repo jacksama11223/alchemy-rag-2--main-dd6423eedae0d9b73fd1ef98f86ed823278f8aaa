@@ -31,7 +31,7 @@ const vectorStoreSchema = new mongoose.Schema({
     sourceType: {
       type: String,
       required: true,
-      enum: ['note', 'alchemy', 'drive', 'chat', 'document', 'pasted_text', 'youtube', 'web', 'voice', 'node', 'comment', 'learning_path', 'drivestorage']
+      enum: ['note', 'alchemy', 'drive', 'chat', 'document', 'pasted_text', 'youtube', 'web', 'voice', 'node', 'comment', 'learning_path', 'drivestorage', 'roadmap']
     },
     originalDocId: {
       type: mongoose.Schema.Types.ObjectId,
