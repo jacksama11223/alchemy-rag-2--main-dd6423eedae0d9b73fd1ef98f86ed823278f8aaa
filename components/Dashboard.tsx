@@ -647,7 +647,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
               <FeatureCard id="draw" icon="draw" title="Không Gian Tư Duy Sáng Tạo" desc="Mô hình hóa ý tưởng" bg="bg-amber-500" color="text-amber-600" onClick={() => handleFeatureClick('draw')} />
               
               <FeatureCard id="media" icon="edit_note" title="Hệ Thống Ghi Chú Kỹ Thuật Số" desc="Quản lý ghi chú" bg="bg-indigo-500" color="text-indigo-600" onClick={() => handleFeatureClick('media')} />
-              <FeatureCard id="digest" icon="checklist" title="Lộ Trình & Tiến Độ Nghiên Cứu" desc="Tiến độ nghiên cứu" bg="bg-teal-500" color="text-teal-600" onClick={() => handleFeatureClick('digest')} />
+              <FeatureCard id="adaptive-learning" icon="auto_awesome" title="Lộ Trình Học Tập Thích Ứng (AI)" desc="AI thiết kế riêng cho bạn" bg="bg-rose-500" color="text-rose-600" onClick={() => handleFeatureClick('adaptive-learning')} />
+              <FeatureCard id="digest" icon="checklist" title="Lộ Trình & Tiến Độ Nghiên Cứu" desc="Todo List & Tiến độ" bg="bg-teal-500" color="text-teal-600" onClick={() => handleFeatureClick('digest')} />
               <FeatureCard id="drive" icon="folder_open" title="Kho Lưu Trữ Dữ Liệu" desc="Lưu trữ dữ liệu" bg="bg-sky-500" color="text-sky-600" onClick={() => handleFeatureClick('drive')} />
               <button 
                   id="feature-community"

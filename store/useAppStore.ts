@@ -203,7 +203,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
         set({ view: 'explore-graph' }); 
     }
-    else if (feature === 'achievements') set({ view: 'achievements' });
+    else if (feature === 'adaptive-learning') set({ view: 'adaptive-learning' });
     else if (feature === 'codex') set({ view: 'codex' });
     else if (feature === 'holodeck') set({ view: 'holodeck' });
     else if (feature === 'dashboard') set({ view: 'dashboard' });

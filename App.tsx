@@ -11,6 +11,7 @@ import SocraticTutor from './components/SocraticTutor';
 import LoginModal from './components/LoginModal';
 import Dashboard from './components/Dashboard';
 import Alchemy from './components/Alchemy';
+import AdaptiveLearningRoadmap from './components/AdaptiveLearningRoadmap';
 import KnowledgeGraph from './components/KnowledgeGraph';
 import NoteTaking from './components/NoteTaking';
 import { DriveStorage } from './components/DriveStorage';
@@ -64,7 +65,7 @@ import { useBehavior } from './contexts/BehaviorContext';
 import { getCurrentUser, getUserNodes, saveUserNodes, logoutUser, getUserNodesByUserId, fetchUserNodesFromServer, fetchMarketplace } from './services/mockBackend';
 import { socketService } from './services/socketService';
 
-type ViewState = 'landing' | 'dashboard' | 'tutor' | 'alchemy' | 'knowledge-graph' | 'media' | 'drive' | 'digest' | 'video' | 'youtube' | 'community' | 'battle' | 'about' | 'vision' | 'mission' | 'story' | 'team' | 'contact' | 'explore-graph' | 'explore-search' | 'explore-category' | 'explore-topic' | 'explore-difficulty' | 'explore-skill' | 'faq' | 'account' | 'draw' | 'drawing-manager' | 'achievements' | 'bridge' | 'user-flow' | 'user-guide' | 'admin' | 'codex' | 'holodeck' | 'reset-password';
+type ViewState = 'landing' | 'dashboard' | 'tutor' | 'alchemy' | 'knowledge-graph' | 'media' | 'drive' | 'digest' | 'video' | 'youtube' | 'community' | 'battle' | 'about' | 'vision' | 'mission' | 'story' | 'team' | 'contact' | 'explore-graph' | 'explore-search' | 'explore-category' | 'explore-topic' | 'explore-difficulty' | 'explore-skill' | 'faq' | 'account' | 'draw' | 'drawing-manager' | 'achievements' | 'bridge' | 'user-flow' | 'user-guide' | 'admin' | 'codex' | 'holodeck' | 'reset-password' | 'adaptive-learning';
 
 import { useMultiTaskStore } from './components/Dashboard-MultiTasking/store/useMultiTaskStore';
 import { useAppStore } from './store/useAppStore';
@@ -556,7 +557,7 @@ function App() {
   const handleMergeNodes = (nodesToMerge: KnowledgeNode[]) => { if (nodesToMerge.length < 2) return; const mergedTitle = `Tổng hợp Tri thức: ${nodesToMerge[0].title} & ${nodesToMerge.length - 1} khái niệm liên quan`; const mergedData: KnowledgeNode['data'] = { flashcards: nodesToMerge.flatMap(n => n.data?.flashcards || []), quiz: nodesToMerge.flatMap(n => n.data?.quiz || []), fillInBlanks: nodesToMerge.flatMap(n => n.data?.fillInBlanks || []), spotErrors: nodesToMerge.flatMap(n => n.data?.spotErrors || []), caseStudies: nodesToMerge.flatMap(n => n.data?.caseStudies || []), summary: nodesToMerge.map(n => n.data?.summary).filter(Boolean).join('\n\n---\n\n') }; const newNode: KnowledgeNode = { id: Date.now().toString(), title: mergedTitle, type: 'Mixed', status: 'new', tags: Array.from(new Set(nodesToMerge.flatMap(n => n.tags || []))), x: nodesToMerge.reduce((sum, n) => sum + n.x, 0) / nodesToMerge.length, y: nodesToMerge.reduce((sum, n) => sum + n.y, 0) / nodesToMerge.length, timestamp: new Date(), data: mergedData, imageUrl: nodesToMerge[0].imageUrl }; setUserNodes(prev => [...prev, newNode]); alert(`Đã hợp nhất ${nodesToMerge.length} đơn vị tri thức thành công!`); };
   const handleDeleteNodes = (nodes: KnowledgeNode[]) => { if (window.confirm("Xác nhận xóa các khái niệm này?")) { const ids = new Set(nodes.map(n => n.id)); setUserNodes(prev => prev.filter(n => !ids.has(n.id))); } };
   const handleDeleteNode = (node: KnowledgeNode) => handleDeleteNodes([node]);
-  const showGlobalNav = !['dashboard', 'landing', 'alchemy', 'knowledge-graph', 'tutor', 'media', 'drive', 'digest', 'video', 'youtube', 'community', 'battle', 'explore-graph', 'explore-search', 'explore-category', 'draw', 'drawing-manager', 'achievements', 'bridge', 'user-flow', 'user-guide', 'admin', 'codex', 'holodeck'].includes(view);
+  const showGlobalNav = !['dashboard', 'landing', 'alchemy', 'knowledge-graph', 'tutor', 'media', 'drive', 'digest', 'video', 'youtube', 'community', 'battle', 'explore-graph', 'explore-search', 'explore-category', 'draw', 'drawing-manager', 'achievements', 'bridge', 'user-flow', 'user-guide', 'admin', 'codex', 'holodeck', 'adaptive-learning'].includes(view);
   const handleOpenDrawing = (drawing: SavedDrawing) => { setCurrentDrawing(drawing); setView('draw'); };
   const handleTodoNavigate = (targetView: string) => { if (targetView === 'digest') { setView('digest'); } else { handleFeatureSelect(targetView); } setIsTodoPanelOpen(false); };
   
@@ -823,6 +824,7 @@ function App() {
         {view === 'media' && <NoteTaking onBack={handleGoBackToDashboard} onShowAbout={handleShowAbout} onLogout={handleLogout} onShowFAQ={handleShowFAQ} onShowAccount={handleShowAccount} onAnalyzeNote={handleCreateNoteFromChat} onToggleTodo={toggleTodoPanel} onNavigateToFeature={handleFeatureSelect} intent={alchemyIntent} onClearIntent={() => setAlchemyIntent(null)} />}
         {view === 'drive' && <DriveStorage onBack={handleGoBackToDashboard} onShowAccount={handleShowAccount} onNavigateToAlchemy={handleNavigateToAlchemy} onToggleTodo={toggleTodoPanel} />}
         {view === 'digest' && <ThingsToDo onBack={handleGoBackToDashboard} onShowAbout={handleShowAbout} onLogout={handleLogout} onShowFAQ={handleShowFAQ} onShowAccount={handleShowAccount} intent={alchemyIntent} onClearIntent={() => setAlchemyIntent(null)} />}
+        {view === 'adaptive-learning' && <AdaptiveLearningRoadmap onBack={handleGoBackToDashboard} />}
         {view === 'video' && <VideoCourse onBack={handleGoBackToDashboard} onShowAbout={handleShowAbout} onLogout={handleLogout} onShowFAQ={handleShowFAQ} onShowAccount={handleShowAccount} onAddNodes={handleAddNodes} onRegisterQuest={handleRegisterQuest} onToggleTodo={toggleTodoPanel} />}
         {view === 'youtube' && (
             <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">

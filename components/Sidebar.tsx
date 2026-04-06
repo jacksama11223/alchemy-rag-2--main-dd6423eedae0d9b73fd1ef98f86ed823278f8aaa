@@ -26,6 +26,8 @@ export function Sidebar() {
 
   const menuItems = [
     { id: 'dashboard', label: 'Bảng điều khiển', icon: LayoutDashboard, color: 'text-sky-400' },
+    { id: 'adaptive-learning', label: 'Lộ trình Thích ứng', icon: LayoutDashboard, color: 'text-rose-400' },
+    { id: 'digest', label: 'Lộ trình & Tiến độ', icon: LayoutDashboard, color: 'text-teal-400' },
     { id: 'media', label: 'Ghi chú tri thức', icon: FileText, color: 'text-amber-400' },
     { id: 'explore-graph', label: 'Sơ đồ Flashcard', icon: BookOpen, color: 'text-emerald-400' },
   ];
