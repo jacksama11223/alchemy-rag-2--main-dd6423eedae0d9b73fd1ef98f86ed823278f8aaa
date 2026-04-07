@@ -74,6 +74,7 @@ export default function AdaptiveLearningScreen() {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
   const [activeTermContext, setActiveTermContext] = useState({ dayIndex: null, taskIndex: null });
+  const [previousTerm, setPreviousTerm] = useState(null);
   const [savedSets, setSavedSets] = useState([]);
   const [isCooldown, setIsCooldown] = useState(false);
   const [currentFlashcardIndex, setCurrentFlashcardIndex] = useState(0);
@@ -129,6 +130,7 @@ export default function AdaptiveLearningScreen() {
   };
 
   const handleOpenActionModal = (term, dayIdx, taskIdx) => {
+    setPreviousTerm(selectedTerm);
     setSelectedTerm(term);
     setActiveTermContext({ dayIndex: dayIdx, taskIndex: taskIdx });
     setInteractiveContent(null);
@@ -151,7 +153,7 @@ export default function AdaptiveLearningScreen() {
           Authorization: `Bearer ${backendToken}`,
           'x-gemini-api-key': apiKey || ''
         },
-        body: JSON.stringify({ term: selectedTerm })
+        body: JSON.stringify({ term: selectedTerm, previousTerm })
       });
       
       const data = await res.json();
@@ -653,15 +655,24 @@ export default function AdaptiveLearningScreen() {
               const isMastered = proficiency === 100;
               const { bg, border, text: textColor } = getTaskColor(proficiency);
               
-              const firstTag = day.tags?.[0] || 'Kiến thức mới';
-              
               return (
                 <TouchableOpacity 
                   key={tidx} 
                   activeOpacity={0.7}
                   onPress={() => {
+                    let termToStudy = '';
                     const match = task.match(/\[\[(.*?)\]\]/);
-                    const termToStudy = match ? match[1] : firstTag;
+                    if (match) {
+                        termToStudy = match[1];
+                    } else {
+                        const words = task.split(' ');
+                        const caps = words.filter((w, index) => index > 0 && /^[A-Z]/.test(w));
+                        if (caps.length > 0) {
+                            termToStudy = caps.join(' ').replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "");
+                        } else {
+                            termToStudy = task;
+                        }
+                    }
                     handleOpenActionModal(termToStudy, idx, tidx);
                   }}
                   style={[

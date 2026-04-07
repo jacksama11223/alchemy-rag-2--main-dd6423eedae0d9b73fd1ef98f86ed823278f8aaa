@@ -340,7 +340,7 @@ exports.deleteRoadmap = async (req, res) => {
 };
 
 exports.generateInteractiveContent = async (req, res) => {
-  const { term, forceUpdate } = req.body;
+  const { term, forceUpdate, previousTerm } = req.body;
   const userId = req.user._id;
   const lockKey = `${userId}-${term}`;
 
@@ -371,7 +371,14 @@ exports.generateInteractiveContent = async (req, res) => {
     const contextString = RAGService.formatContext(contextResults);
 
     const ai = getAI(req);
-    const prompt = `Create a learning session for the term "[[${term}]]" based on this context:\n${contextString}\n\nProvide 3 things:
+    const antiLoopInstruction = previousTerm && previousTerm !== term ? `\nWARNING: The user just studied [${previousTerm}]. DO NOT generate content related to [${previousTerm}] unless it's fundamentally connected. Try to provide entirely fresh knowledge.` : '';
+    const prompt = `Create a learning session for the term/topic: "[[${term}]]".
+Pay extremely close attention to the capitalized keywords in the topic. ${antiLoopInstruction}
+
+Context provided by RAG (Use ONLY if directly applicable to ${term}, otherwise ignore it entirely to prevent hallucination):
+${contextString}
+
+Provide 3 things:
     1. A Flashcard (Front & Back)
     2. A 3-question Quiz with options
     3. A Code Writing Challenge (if applicable, else a logic puzzle)
