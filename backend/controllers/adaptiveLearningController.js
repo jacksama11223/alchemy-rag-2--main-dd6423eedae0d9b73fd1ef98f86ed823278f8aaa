@@ -340,7 +340,7 @@ exports.deleteRoadmap = async (req, res) => {
 };
 
 exports.generateInteractiveContent = async (req, res) => {
-  const { term } = req.body;
+  const { term, forceUpdate } = req.body;
   const userId = req.user._id;
   const lockKey = `${userId}-${term}`;
 
@@ -349,9 +349,13 @@ exports.generateInteractiveContent = async (req, res) => {
 
     // 1. Check if we already have this Unified Learning Module
     const existingModule = await LearningModule.findOne({ user: userId, term: term });
-    if (existingModule) {
-      console.log(`[DB] Cache Hit: Returning existing LearningModule for: ${term}`);
-      return res.status(200).json(existingModule);
+    if (existingModule && !forceUpdate) {
+      if (!existingModule.shortAnswers || existingModule.shortAnswers.length === 0) {
+          console.log(`[DB] Module exists but missing shortAnswers. Forcing generation for: ${term}`);
+      } else {
+          console.log(`[DB] Cache Hit: Returning existing LearningModule for: ${term}`);
+          return res.status(200).json(existingModule);
+      }
     }
 
     // 2. RPM Lock
@@ -410,7 +414,7 @@ exports.generateInteractiveContent = async (req, res) => {
     };
 
     let content = null;
-    const modelsList = ['gemini-3-flash-preview', 'gemini-1.5-flash-latest'];
+    const modelsList = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
 
     // --- STRATEGY 1: JSON Schema Mode (Loop through models) ---
     for (const modelName of modelsList) {
@@ -437,7 +441,7 @@ exports.generateInteractiveContent = async (req, res) => {
 
     // --- STRATEGY 2: Fallback to Raw Text Mode ---
     if (!content) {
-      const stableModel = 'gemini-1.5-flash-latest';
+      const stableModel = 'gemini-3.1-flash-lite-preview';
       console.log(`[AI] Strategy 2: Attempting Raw Text Fallback with ${stableModel}...`);
       try {
         const rawResponse = await ai.models.generateContent({
@@ -502,8 +506,17 @@ exports.getExistingModules = async (req, res) => {
 
 exports.submitActivityScore = async (req, res) => {
   try {
-    const { points, activityType, term, roadmapId, dayIndex, taskIndex } = req.body;
+    const { points, activityType, term, roadmapId, dayIndex, taskIndex, performanceData, userResultsUpdate } = req.body;
     const userId = req.user._id;
+
+    if (userResultsUpdate) {
+       const module = await LearningModule.findOne({ user: userId, term });
+       if (module) {
+          module.userResults = { ...module.userResults, ...userResultsUpdate };
+          module.markModified('userResults');
+          await module.save();
+       }
+    }
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -570,6 +583,33 @@ exports.submitActivityScore = async (req, res) => {
        }
     }
 
+    // Save to VectorStore context using syncToRag
+    if (performanceData && performanceData.metrics) {
+       const ragLog = `[LỊCH SỬ HỌC TẬP] Hoạt động: ${activityType === 'quiz' ? 'Bài Trắc Nghiệm' : activityType === 'short_answer' ? 'Câu hỏi Tự luận' : 'Thẻ Flashcard'}. Chủ đề: "${term}". Người dùng đã đạt được điểm độ thành thạo ${performanceData.metrics.proficiency || 0}%. Các lưu ý cần cải thiện hoặc làm sai: ${performanceData.metrics.mistakes || 'Không có'}. (Nhận được ${points} Power)`;
+       const { syncToRag } = require('../utils/ragSync');
+       await syncToRag({
+         userId,
+         text: ragLog,
+         title: `Log Thành Tích: ${term} (${activityType})`,
+         sourceType: 'learning_path',
+         metadata: { term, activityType, points, isPerformanceLog: true }
+       });
+       
+       // Thêm push Memory vào bảng UserMemory nếu dưới 80%
+       if (performanceData.metrics.proficiency < 80) {
+         try {
+            const UserMemory = require('../models/UserMemory');
+            await UserMemory.create({
+               userId,
+               category: 'Learning Weakness',
+               fact: `Người dùng cần cải thiện kiến thức về chủ đề "${term}" ở phần ${activityType}. Điểm đạt: ${performanceData.metrics.proficiency}%. Vấn đề: ${performanceData.metrics.mistakes || 'Sai nhiều'}`
+            });
+         } catch (e) {
+            console.error('Error saving UserMemory:', e);
+         }
+       }
+    }
+
     res.status(200).json({ 
       message: 'Activity recorded and power gained', 
       brainPower: user.brainPower,
@@ -578,5 +618,122 @@ exports.submitActivityScore = async (req, res) => {
   } catch (error) {
     console.error('Error submitting activity score:', error);
     res.status(500).json({ message: 'Failed to submit score' });
+  }
+};
+
+exports.generateMoreChallenge = async (req, res) => {
+  const { term, activityType } = req.body;
+  const userId = req.user._id;
+
+  try {
+     const module = await LearningModule.findOne({ user: userId, term });
+     if (!module) return res.status(404).json({ message: 'Module not found' });
+
+     const RAGService = require('../services/RAGService');
+     const contextResults = await RAGService.retrieve(term, userId.toString(), { limit: 8 });
+     const contextString = RAGService.formatContext(contextResults);
+
+     const ai = getAI(req);
+     let prompt = `Tạo thêm 5 câu hỏi THỬ THÁCH hơn cho tính năng "${activityType}" về chủ đề "${term}".\nĐặc biệt tập trung sửa các sai lầm hoặc lấp lỗ hổng dựa trên bối cảnh lịch sử học tập sau đây:\n${contextString}\n\n`;
+     
+     const { Type } = require('@google/genai');
+     let schema;
+     if (activityType === 'flashcard') {
+         prompt += 'Yêu cầu trả về mảng flashcard mới gốm 5 câu.';
+         schema = {
+             type: Type.OBJECT,
+             properties: {
+                 flashcards: {
+                     type: Type.ARRAY,
+                     items: {
+                         type: Type.OBJECT,
+                         properties: { front: { type: Type.STRING }, back: { type: Type.STRING } },
+                         required: ["front", "back"]
+                     }
+                 }
+             },
+             required: ["flashcards"]
+         };
+     } else if (activityType === 'quiz') {
+         prompt += 'Yêu cầu trả về mảng quiz mới gồm 5 câu trắc nghiệm khó.';
+         schema = {
+             type: Type.OBJECT,
+             properties: {
+                 quiz: {
+                     type: Type.ARRAY,
+                     items: {
+                         type: Type.OBJECT,
+                         properties: {
+                             question: { type: Type.STRING },
+                             options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                             correctAnswer: { type: Type.STRING },
+                             explanation: { type: Type.STRING }
+                         },
+                         required: ["question", "options", "correctAnswer", "explanation"]
+                     }
+                 }
+             },
+             required: ["quiz"]
+         };
+     } else if (activityType === 'short_answer') {
+         prompt += 'Yêu cầu trả về mảng shortAnswers mới gồm 5 câu hỏi tự luận mở.';
+         schema = {
+             type: Type.OBJECT,
+             properties: {
+                 shortAnswers: {
+                     type: Type.ARRAY,
+                     items: {
+                         type: Type.OBJECT,
+                         properties: {
+                             question: { type: Type.STRING },
+                             answer: { type: Type.STRING },
+                             explanation: { type: Type.STRING }
+                         },
+                         required: ["question", "answer", "explanation"]
+                     }
+                 }
+             },
+             required: ["shortAnswers"]
+         };
+     } else {
+         return res.status(400).json({ message: 'Invalid activityType' });
+     }
+
+     let content = null;
+     const modelsList = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+     for (const modelName of modelsList) {
+         if (content) break;
+         try {
+             const config = { responseMimeType: "application/json", responseSchema: schema };
+             const response = await ai.models.generateContent({
+                 model: modelName,
+                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                 config: config
+             });
+             if (response && response.text) {
+                 content = smartParse(response.text);
+             }
+         } catch (e) {
+             console.warn(`[AI] Failed more challenge on ${modelName}: ${e.message}`);
+         }
+     }
+
+     if (!content) {
+         throw new Error('Failed to generate more challenges');
+     }
+
+     if (activityType === 'flashcard' && content.flashcards) {
+         module.flashcards = [...(module.flashcards || []), ...(module.flashcard ? [module.flashcard] : []), ...content.flashcards];
+     } else if (activityType === 'quiz' && content.quiz) {
+         module.quiz = [...(module.quiz || []), ...content.quiz];
+     } else if (activityType === 'short_answer' && content.shortAnswers) {
+         module.shortAnswers = [...(module.shortAnswers || []), ...content.shortAnswers];
+     }
+     
+     await module.save();
+     return res.status(200).json(module);
+  } catch (error) {
+     console.error('Error generating more challenge:', error);
+     res.status(500).json({ message: 'Failed to generate more challenge', error: error.message });
   }
 };

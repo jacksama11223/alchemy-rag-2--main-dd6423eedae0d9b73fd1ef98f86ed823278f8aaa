@@ -76,6 +76,17 @@ export default function AdaptiveLearningScreen() {
   const [activeTermContext, setActiveTermContext] = useState({ dayIndex: null, taskIndex: null });
   const [savedSets, setSavedSets] = useState([]);
   const [isCooldown, setIsCooldown] = useState(false);
+  const [currentFlashcardIndex, setCurrentFlashcardIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [flashcardScores, setFlashcardScores] = useState([]);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [isQuizSubmitted, setIsQuizSubmitted] = useState(false);
+  const [isFlashcardSubmitted, setIsFlashcardSubmitted] = useState(false);
+  const [currentShortAnswerIndex, setCurrentShortAnswerIndex] = useState(0);
+  const [shortAnswerInputs, setShortAnswerInputs] = useState({});
+  const [isShortAnswerFlipped, setIsShortAnswerFlipped] = useState(false);
+  const [shortAnswerScores, setShortAnswerScores] = useState([]);
+  const [isShortAnswerSubmitted, setIsShortAnswerSubmitted] = useState(false);
 
   useEffect(() => {
     if (backendToken) {
@@ -147,6 +158,12 @@ export default function AdaptiveLearningScreen() {
       
       if (res.ok) {
         setInteractiveContent(data);
+        setIsQuizSubmitted(data.userResults?.isQuizSubmitted || false);
+        setIsFlashcardSubmitted(data.userResults?.isFlashcardSubmitted || false);
+        setQuizAnswers(data.userResults?.quizAnswers || {});
+        setFlashcardScores(data.userResults?.flashcardScores || []);
+        setShortAnswerScores(data.userResults?.shortAnswerScores || []);
+        setIsShortAnswerSubmitted(data.userResults?.isShortAnswerSubmitted || false);
       } else {
         throw new Error(data.message || 'AI đang bận, vui lòng thử lại sau');
       }
@@ -164,19 +181,53 @@ export default function AdaptiveLearningScreen() {
     }
   };
 
+  const handleGenerateMoreChallenge = async () => {
+    setIsActionLoading(true);
+    try {
+      const res = await fetch(`${backendUrl}/api/adaptive/generate-more-challenge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${backendToken}`,
+          'x-gemini-api-key': apiKey || ''
+        },
+        body: JSON.stringify({ term: selectedTerm, activityType: activityStep })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInteractiveContent(data);
+        Toast.show({ type: 'success', text1: 'Đã tạo thêm 5 câu hỏi khó hơn!' });
+      } else {
+        Toast.show({ type: 'error', text1: 'Lỗi', text2: data.message });
+      }
+    } catch (error) {
+       console.log('Error more challenge', error);
+    } finally {
+       setIsActionLoading(false);
+    }
+  };
+
   const useSavedSet = (mod) => {
     // Map Unified LearningModule to the interactiveContent structure
     setInteractiveContent({
+      flashcards: mod.flashcards && mod.flashcards.length > 0 ? mod.flashcards : (mod.flashcard ? [mod.flashcard] : []),
       flashcard: mod.flashcard,
       quiz: mod.quiz,
+      shortAnswers: mod.shortAnswers || [],
       codeChallenge: mod.codeChallenge
     });
-    // Stay in menu or auto-switch to a mode? 
-    // Let's set it to flashcard by default but keep current state if user clicks from modal
     setActivityStep('flashcard'); 
+    setCurrentFlashcardIndex(0);
+    setIsFlipped(false);
+    setFlashcardScores(mod.userResults?.flashcardScores || []);
+    setIsQuizSubmitted(mod.userResults?.isQuizSubmitted || false);
+    setIsFlashcardSubmitted(mod.userResults?.isFlashcardSubmitted || false);
+    setQuizAnswers(mod.userResults?.quizAnswers || {});
+    setShortAnswerScores(mod.userResults?.shortAnswerScores || []);
+    setIsShortAnswerSubmitted(mod.userResults?.isShortAnswerSubmitted || false);
   };
 
-  const handleSubmitActivity = async (points, activityType) => {
+  const handleSubmitActivity = async (points, activityType, performanceData = null, userResultsUpdate = null) => {
     try {
       const res = await fetch(`${backendUrl}/api/adaptive/submit-activity-score`, {
         method: 'POST',
@@ -190,7 +241,9 @@ export default function AdaptiveLearningScreen() {
           term: selectedTerm,
           roadmapId: selectedRoadmapId,
           dayIndex: activeTermContext.dayIndex,
-          taskIndex: activeTermContext.taskIndex
+          taskIndex: activeTermContext.taskIndex,
+          performanceData,
+          userResultsUpdate
         })
       });
       if (res.ok) {
@@ -202,6 +255,9 @@ export default function AdaptiveLearningScreen() {
         }));
         Toast.show({ type: 'success', text1: `+${points} Brain Power!`, text2: `Cấp độ: ${data.brainLevel}` });
         setIsActionModalVisible(false);
+      } else {
+        const data = await res.json();
+        Toast.show({ type: 'error', text1: 'Không thể cộng điểm', text2: data.message || 'Lỗi xử lý' });
       }
     } catch (err) {
       console.log('Failed to submit score', err);
@@ -373,25 +429,10 @@ export default function AdaptiveLearningScreen() {
   const getTaskColor = (proficiency) => {
     if (proficiency === null || proficiency === undefined) return { bg: '#f1f5f9', border: '#e2e8f0', text: '#64748b' };
     
-    // Scale: Red (0) -> Yellow (50) -> Green (100)
-    let r = 0, g = 0, b = 0;
-    
-    if (proficiency < 50) {
-      // Red to Yellow
-      r = 255;
-      g = Math.round((proficiency / 50) * 255);
-      b = 100;
-    } else {
-      // Yellow to Green
-      r = Math.round(255 - ((proficiency - 50) / 50) * 255);
-      g = 255;
-      b = 100;
-    }
-
-    return { 
-      bg: `rgba(${r}, ${g}, ${b}, 0.15)`, 
-      border: `rgba(${r}, ${g}, ${b}, 0.3)`,
-      text: `rgb(${Math.max(0, r-50)}, ${Math.max(0, g-50)}, ${Math.max(0, b-50)})`
+    return {
+      bg: '#eff6ff',
+      border: '#bfdbfe',
+      text: '#2563eb'
     };
   };
 
@@ -749,7 +790,7 @@ export default function AdaptiveLearningScreen() {
   const renderActionModal = () => (
     <Modal visible={isActionModalVisible} transparent animationType="fade" onRequestClose={() => setIsActionModalVisible(false)}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.actionModal, { minHeight: 450 }]}>
+        <View style={[styles.actionModal, { minHeight: 450, maxHeight: '90%' }]}>
           <View style={styles.actionHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.actionLabel}>Chủ đề: {selectedTerm}</Text>
@@ -779,7 +820,7 @@ export default function AdaptiveLearningScreen() {
                     <TouchableOpacity 
                       disabled={isCooldown}
                       style={[styles.menuItem, isCooldown && { opacity: 0.5 }]} 
-                      onPress={() => { setActivityStep('flashcard'); handleGenerateContent(); }}
+                      onPress={() => { setActivityStep('flashcard'); setCurrentFlashcardIndex(0); setIsFlipped(false); setFlashcardScores([]); handleGenerateContent(); }}
                     >
                       <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.menuIcon}><BookOpen size={24} color="white" /></LinearGradient>
                       <Text style={styles.menuText}>Flashcard AI</Text>
@@ -787,10 +828,18 @@ export default function AdaptiveLearningScreen() {
                     <TouchableOpacity 
                       disabled={isCooldown}
                       style={[styles.menuItem, isCooldown && { opacity: 0.5 }]} 
-                      onPress={() => { setActivityStep('quiz'); handleGenerateContent(); }}
+                      onPress={() => { setActivityStep('quiz'); setQuizAnswers({}); setIsQuizSubmitted(false); handleGenerateContent(); }}
                     >
                       <LinearGradient colors={['#10b981', '#059669']} style={styles.menuIcon}><Target size={24} color="white" /></LinearGradient>
                       <Text style={styles.menuText}>Bài Quiz</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      disabled={isCooldown}
+                      style={[styles.menuItem, isCooldown && { opacity: 0.5 }]} 
+                      onPress={() => { setActivityStep('short_answer'); setCurrentShortAnswerIndex(0); setShortAnswerInput(''); setIsShortAnswerFlipped(false); setShortAnswerScores([]); handleGenerateContent(); }}
+                    >
+                      <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.menuIcon}><BookOpen size={24} color="white" /></LinearGradient>
+                      <Text style={styles.menuText}>Tự Luận</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       disabled={isCooldown}
@@ -824,47 +873,277 @@ export default function AdaptiveLearningScreen() {
                 </View>
               )}
 
-              {activityStep === 'flashcard' && interactiveContent?.flashcard && (
-                <View style={styles.flashcardView}>
-                   <View style={styles.flashcard}>
-                      <Text style={styles.fcLabel}>GHI NHỚ</Text>
-                      <Text style={styles.fcFront}>{interactiveContent.flashcard.front}</Text>
-                      <View style={styles.fcDivider} />
-                      <Text style={styles.fcLabel}>GIẢI THÍCH</Text>
-                      <Text style={styles.fcBack}>{interactiveContent.flashcard.back}</Text>
-                   </View>
-                   <TouchableOpacity style={styles.submitAciBtn} onPress={() => handleSubmitActivity(30, 'flashcard')}>
-                      <Text style={styles.submitAciText}>Đã hiểu bài (+30 Power)</Text>
-                   </TouchableOpacity>
-                </View>
-              )}
+              {activityStep === 'flashcard' && (interactiveContent?.flashcards?.length > 0 || interactiveContent?.flashcard) && (() => {
+                const flashcards = interactiveContent?.flashcards?.length > 0 ? interactiveContent.flashcards : [interactiveContent.flashcard];
+                const currentFC = flashcards[currentFlashcardIndex];
+                if (!currentFC) return null;
+                return (
+                  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}>
+                    <View style={styles.flashcardContainer}>
+                        <Text style={styles.fcProgressText}>Thẻ {currentFlashcardIndex + 1} / {flashcards.length}</Text>
+                        <TouchableOpacity 
+                          activeOpacity={0.9} 
+                          onPress={() => setIsFlipped(!isFlipped)} 
+                          style={styles.flashcardRateBlock}
+                        >
+                          {!isFlipped ? (
+                            <MotiView from={{ opacity: 0, rotateY: '90deg' }} animate={{ opacity: 1, rotateY: '0deg' }} style={styles.fcSide}>
+                                <Text style={styles.fcLabel}>MẶT TRƯỚC (Chạm để lật)</Text>
+                                <Text style={[styles.fcFront, {textAlign: 'center'}]}>{currentFC.front}</Text>
+                            </MotiView>
+                          ) : (
+                            <MotiView from={{ opacity: 0, rotateY: '-90deg' }} animate={{ opacity: 1, rotateY: '0deg' }} style={styles.fcSide}>
+                                <Text style={styles.fcLabel}>MẶT SAU</Text>
+                                <Text style={[styles.fcBack, {textAlign: 'center'}]}>{currentFC.back}</Text>
+                            </MotiView>
+                          )}
+                        </TouchableOpacity>
+                    </View>
+
+                    {isFlipped && (
+                      <View style={styles.fcRatingContainer}>
+                          <Text style={styles.fcRatingLabel}>Mức độ hiểu bài của bạn:</Text>
+                          <View style={styles.fcRatingButtons}>
+                            {[25, 50, 75, 100].map(level => {
+                              const isSelected = flashcardScores[currentFlashcardIndex] === level;
+                              return (
+                              <TouchableOpacity 
+                                key={level} 
+                                style={[styles.fcRateBtn, { 
+                                  backgroundColor: level === 100 ? '#10b981' : level === 75 ? '#3b82f6' : level === 50 ? '#f59e0b' : '#ef4444',
+                                  borderWidth: isSelected ? 3 : 0,
+                                  borderColor: isSelected ? '#1e293b' : 'transparent',
+                                  transform: [{ scale: isSelected ? 1.1 : 1 }]
+                                }]}
+                                onPress={() => {
+                                  if (!isFlashcardSubmitted) {
+                                    const newScores = [...flashcardScores];
+                                    newScores[currentFlashcardIndex] = level;
+                                    setFlashcardScores(newScores);
+                                    if (currentFlashcardIndex < flashcards.length - 1) {
+                                        setCurrentFlashcardIndex(currentFlashcardIndex + 1);
+                                        setIsFlipped(false);
+                                    }
+                                  }
+                                }}
+                              >
+                                  <Text style={styles.fcRateText}>{level}%</Text>
+                              </TouchableOpacity>
+                            )})}
+                          </View>
+                      </View>
+                    )}
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 10 }}>
+                      <TouchableOpacity onPress={() => { setCurrentFlashcardIndex(Math.max(0, currentFlashcardIndex - 1)); setIsFlipped(false); }} style={{ padding: 10, opacity: currentFlashcardIndex === 0 ? 0.3 : 1 }} disabled={currentFlashcardIndex === 0}>
+                         <ArrowLeft size={24} color="#6366f1" />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => { setCurrentFlashcardIndex(Math.min(flashcards.length - 1, currentFlashcardIndex + 1)); setIsFlipped(false); }} style={{ padding: 10, opacity: currentFlashcardIndex === flashcards.length - 1 ? 0.3 : 1 }} disabled={currentFlashcardIndex === flashcards.length - 1}>
+                         <ArrowRight size={24} color="#6366f1" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {!isFlashcardSubmitted ? (
+                       flashcardScores.length >= flashcards.length && (
+                         <TouchableOpacity style={[styles.submitAciBtn, {backgroundColor: '#10b981', marginTop: 10}]} onPress={() => {
+                            setIsFlashcardSubmitted(true);
+                            const avg = flashcardScores.reduce((a,b) => a+b, 0) / flashcardScores.length;
+                            const points = Math.round(30 * (avg / 100));
+                            handleSubmitActivity(points, 'flashcard', { metrics: { proficiency: avg } }, { flashcardScores, isFlashcardSubmitted: true });
+                         }}>
+                            <Text style={styles.submitAciText}>Hoàn Thành Ghi Nhớ Thẻ</Text>
+                         </TouchableOpacity>
+                       )
+                    ) : (
+                       <View>
+                         <TouchableOpacity style={[styles.submitAciBtn, {marginTop: 10}]} onPress={() => { setIsActionModalVisible(false); fetchAllData(); }}>
+                            <Text style={styles.submitAciText}>Lưu & Trở về lộ trình</Text>
+                         </TouchableOpacity>
+                         <TouchableOpacity style={[styles.submitAciBtn, {backgroundColor: '#f59e0b', marginTop: 12}]} onPress={handleGenerateMoreChallenge}>
+                            <Text style={styles.submitAciText}>Tạo 5 thẻ khó hơn (+5)</Text>
+                         </TouchableOpacity>
+                       </View>
+                    )}
+                   </ScrollView>
+                );
+              })()}
 
               {activityStep === 'quiz' && interactiveContent?.quiz && (
                  <ScrollView style={{ flex: 1 }}>
-                    {interactiveContent.quiz.map((q, idx) => (
+                    {interactiveContent.quiz.map((q, idx) => {
+                      const selected = quizAnswers[idx];
+                      return (
                       <View key={idx} style={styles.miniQuizItem}>
                         <Text style={styles.mqText}>{q.question}</Text>
                         <View style={styles.mqOptions}>
-                          {q.options.map((opt, oidx) => (
-                            <TouchableOpacity key={oidx} style={styles.mqOption} onPress={() => {
-                              if(opt === q.correctAnswer) {
-                                Toast.show({ type: 'success', text1: 'Chính xác!' });
-                                setQuizScore(prev => prev + 1);
-                              } else {
-                                Toast.show({ type: 'error', text1: 'Sai rồi', text2: `Đáp án: ${q.correctAnswer}` });
+                          {q.options.map((opt, oidx) => {
+                            let isCorrect = false;
+                            let isWrong = false;
+                            if (isQuizSubmitted) {
+                               if (opt === q.correctAnswer) isCorrect = true;
+                               if (selected === opt && opt !== q.correctAnswer) isWrong = true;
+                            }
+                            return (
+                            <TouchableOpacity key={oidx} style={[styles.mqOption,
+                                selected === opt && { borderColor: '#6366f1', borderWidth: 2 },
+                                isCorrect && { backgroundColor: '#d1fae5', borderColor: '#10b981' },
+                                isWrong && { backgroundColor: '#fee2e2', borderColor: '#ef4444' }
+                            ]} onPress={() => {
+                              if (!isQuizSubmitted) {
+                                setQuizAnswers({...quizAnswers, [idx]: opt});
                               }
                             }}>
                               <Text style={styles.mqOptionText}>{opt}</Text>
                             </TouchableOpacity>
-                          ))}
+                          )})}
                         </View>
+                        {isQuizSubmitted && selected !== q.correctAnswer && (
+                          <Text style={{fontSize: 12, color: '#ef4444', marginTop: 8}}>Giải thích: {q.explanation}</Text>
+                        )}
                       </View>
-                    ))}
-                    <TouchableOpacity style={styles.submitAciBtn} onPress={() => handleSubmitActivity(50, 'quiz')}>
-                       <Text style={styles.submitAciText}>Hoàn thành Quiz (+50 Power)</Text>
-                    </TouchableOpacity>
+                    )})}
+                    {!isQuizSubmitted ? (
+                      <TouchableOpacity style={styles.submitAciBtn} onPress={() => setIsQuizSubmitted(true)}>
+                         <Text style={styles.submitAciText}>Kiểm tra đáp án</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View>
+                        <TouchableOpacity style={styles.submitAciBtn} onPress={() => {
+                          let correctCount = 0;
+                          let mistakes = [];
+                          interactiveContent.quiz.forEach((q, idx) => {
+                              if (quizAnswers[idx] === q.correctAnswer) correctCount++;
+                              else mistakes.push(q.question);
+                          });
+                          const proficiency = Math.round((correctCount / interactiveContent.quiz.length) * 100);
+                          const points = Math.round(50 * (proficiency / 100));
+                          handleSubmitActivity(points, 'quiz', {
+                             metrics: { proficiency, mistakes: mistakes.join('; ') }
+                          }, {
+                             isQuizSubmitted: true,
+                             quizAnswers: quizAnswers
+                          });
+                        }}>
+                           <Text style={styles.submitAciText}>Hoàn thành Quiz (+{Math.round(50 * (Object.values(quizAnswers).filter((ans, idx) => ans === interactiveContent.quiz[idx].correctAnswer).length / interactiveContent.quiz.length))} Power)</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.submitAciBtn, {backgroundColor: '#f59e0b', marginTop: 12}]} onPress={handleGenerateMoreChallenge}>
+                           <Text style={styles.submitAciText}>Tạo 5 bài Quiz khó hơn (+5)</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.submitAciBtn, {marginTop: 12}]} onPress={() => { setIsActionModalVisible(false); fetchAllData(); }}>
+                           <Text style={styles.submitAciText}>Lưu & Trở về lộ trình</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                  </ScrollView>
               )}
+
+              {activityStep === 'short_answer' && interactiveContent?.shortAnswers && interactiveContent.shortAnswers.length > 0 && (() => {
+                const saArray = interactiveContent.shortAnswers;
+                const currentSA = saArray[currentShortAnswerIndex];
+                if (!currentSA) return null;
+                return (
+                  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}>
+                    <View style={styles.flashcardContainer}>
+                        <Text style={styles.fcProgressText}>Câu hỏi {currentShortAnswerIndex + 1} / {saArray.length}</Text>
+                        <View style={styles.flashcardRateBlock}>
+                           <Text style={styles.fcLabel}>CÂU HỎI TỰ LUẬN</Text>
+                           <Text style={[styles.fcFront, {marginBottom: 20}]}>{currentSA.question}</Text>
+                           
+                           {!isShortAnswerFlipped ? (
+                              <View>
+                                 <TextInput 
+                                   style={[styles.input, {backgroundColor: '#fff', minHeight: 80, borderColor: '#e2e8f0', borderWidth: 1, borderRadius: 12}]} 
+                                   multiline 
+                                   placeholder="Nhập câu trả lời của bạn..." 
+                                   value={shortAnswerInputs[currentShortAnswerIndex] || ''}
+                                   onChangeText={(t) => setShortAnswerInputs({...shortAnswerInputs, [currentShortAnswerIndex]: t})}
+                                 />
+                                 <TouchableOpacity style={styles.submitAciBtn} onPress={() => setIsShortAnswerFlipped(true)}>
+                                   <Text style={styles.submitAciText}>Xem đáp án</Text>
+                                 </TouchableOpacity>
+                              </View>
+                           ) : (
+                              <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }}>
+                                 <View style={styles.fcDivider} />
+                                 <Text style={styles.fcLabel}>ĐÁP ÁN ĐÚNG</Text>
+                                 <Text style={styles.fcBack}>{currentSA.answer}</Text>
+                                 <View style={styles.fcDivider} />
+                                 <Text style={styles.fcLabel}>GIẢI THÍCH</Text>
+                                 <Text style={[styles.fcBack, {fontSize: 14}]}>{currentSA.explanation}</Text>
+                              </MotiView>
+                           )}
+                        </View>
+                    </View>
+
+                    {isShortAnswerFlipped && (
+                      <View style={styles.fcRatingContainer}>
+                          <Text style={styles.fcRatingLabel}>Độ chính xác của bạn:</Text>
+                          <View style={styles.fcRatingButtons}>
+                            {[25, 50, 75, 100].map(level => {
+                              const isSelected = shortAnswerScores[currentShortAnswerIndex] === level;
+                              return (
+                              <TouchableOpacity 
+                                key={level} 
+                                style={[styles.fcRateBtn, { 
+                                  backgroundColor: level === 100 ? '#10b981' : level === 75 ? '#3b82f6' : level === 50 ? '#f59e0b' : '#ef4444',
+                                  borderWidth: isSelected ? 3 : 0,
+                                  borderColor: isSelected ? '#1e293b' : 'transparent',
+                                  transform: [{ scale: isSelected ? 1.1 : 1 }]
+                                }]}
+                                onPress={() => {
+                                  if (!isShortAnswerSubmitted) {
+                                    const newScores = [...shortAnswerScores];
+                                    newScores[currentShortAnswerIndex] = level;
+                                    setShortAnswerScores(newScores);
+                                    if (currentShortAnswerIndex < saArray.length - 1) {
+                                        setCurrentShortAnswerIndex(currentShortAnswerIndex + 1);
+                                        setIsShortAnswerFlipped(false);
+                                    }
+                                  }
+                                }}
+                              >
+                                  <Text style={styles.fcRateText}>{level}%</Text>
+                              </TouchableOpacity>
+                            )})}
+                          </View>
+                      </View>
+                    )}
+                    
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 10 }}>
+                      <TouchableOpacity onPress={() => { setCurrentShortAnswerIndex(Math.max(0, currentShortAnswerIndex - 1)); setIsShortAnswerFlipped(false); }} style={{ padding: 10, opacity: currentShortAnswerIndex === 0 ? 0.3 : 1 }} disabled={currentShortAnswerIndex === 0}>
+                         <ArrowLeft size={24} color="#6366f1" />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => { setCurrentShortAnswerIndex(Math.min(saArray.length - 1, currentShortAnswerIndex + 1)); setIsShortAnswerFlipped(false); }} style={{ padding: 10, opacity: currentShortAnswerIndex === saArray.length - 1 ? 0.3 : 1 }} disabled={currentShortAnswerIndex === saArray.length - 1}>
+                         <ArrowRight size={24} color="#6366f1" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {!isShortAnswerSubmitted ? (
+                       shortAnswerScores.length >= saArray.length && (
+                         <TouchableOpacity style={[styles.submitAciBtn, {backgroundColor: '#10b981', marginTop: 10}]} onPress={() => {
+                            setIsShortAnswerSubmitted(true);
+                            const avg = shortAnswerScores.reduce((a,b) => a+b, 0) / shortAnswerScores.length;
+                            const points = Math.round(50 * (avg / 100)); 
+                            handleSubmitActivity(points, 'short_answer', {
+                               metrics: { proficiency: avg, mistakes: avg < 50 ? 'Cần ôn lại tự luận' : 'Không có gì' }
+                            }, { shortAnswerScores, isShortAnswerSubmitted: true });
+                         }}>
+                            <Text style={styles.submitAciText}>Hoàn Thành Làm Bài Tự Luận</Text>
+                         </TouchableOpacity>
+                       )
+                    ) : (
+                       <View>
+                         <TouchableOpacity style={[styles.submitAciBtn, {marginTop: 10}]} onPress={() => { setIsActionModalVisible(false); fetchAllData(); }}>
+                            <Text style={styles.submitAciText}>Lưu & Trở về lộ trình</Text>
+                         </TouchableOpacity>
+                         <TouchableOpacity style={[styles.submitAciBtn, {backgroundColor: '#f59e0b', marginTop: 12}]} onPress={handleGenerateMoreChallenge}>
+                            <Text style={styles.submitAciText}>Tạo 5 tự luận khó hơn (+5)</Text>
+                         </TouchableOpacity>
+                       </View>
+                    )}
+                  </ScrollView>
+                );
+              })()}
 
               {activityStep === 'code' && interactiveContent?.codeChallenge && (
                 <View style={styles.codeView}>
@@ -876,7 +1155,9 @@ export default function AdaptiveLearningScreen() {
                    <View style={styles.codeBlock}>
                       <Text style={styles.codeText}>{interactiveContent.codeChallenge.startCode}</Text>
                    </View>
-                   <TouchableOpacity style={styles.submitAciBtn} onPress={() => handleSubmitActivity(100, 'code')}>
+                   <TouchableOpacity style={styles.submitAciBtn} onPress={() => handleSubmitActivity(100, 'code', {
+                      metrics: { proficiency: 100, mistakes: 'Không có' }
+                   })}>
                       <Text style={styles.submitAciText}>Nộp bài giải (+100 Power)</Text>
                    </TouchableOpacity>
                 </View>
@@ -1078,6 +1359,15 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 14, fontWeight: '800', color: '#1e293b' },
   
   flashcardView: { gap: 20 },
+  flashcardContainer: { width: '100%', alignItems: 'center' },
+  fcProgressText: { fontSize: 13, color: '#64748b', fontWeight: '800', marginBottom: 12 },
+  flashcardRateBlock: { width: '100%', backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 180 },
+  fcSide: { width: '100%', minHeight: 140, justifyContent: 'center' },
+  fcRatingContainer: { marginTop: 10, padding: 16, backgroundColor: '#f1f5f9', borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+  fcRatingLabel: { fontSize: 13, color: '#475569', fontWeight: '700', marginBottom: 16 },
+  fcRatingButtons: { flexDirection: 'row', gap: 12, width: '100%', justifyContent: 'space-between' },
+  fcRateBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  fcRateText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   flashcard: { backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 180 },
   fcLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '800', letterSpacing: 1, marginBottom: 8 },
   fcFront: { fontSize: 18, color: '#1e293b', fontWeight: '700', marginBottom: 16 },
