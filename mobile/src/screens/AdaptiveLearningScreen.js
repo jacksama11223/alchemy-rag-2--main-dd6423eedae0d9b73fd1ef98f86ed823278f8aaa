@@ -37,7 +37,8 @@ import {
   Check,
   X,
   Code as CodeIcon,
-  Play
+  Play,
+  LogOut
 } from 'lucide-react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useApiKey } from '../context/ApiKeyContext';
@@ -69,10 +70,12 @@ export default function AdaptiveLearningScreen() {
   const [selectedTerm, setSelectedTerm] = useState('');
   const [interactiveContent, setInteractiveContent] = useState(null);
   const [isActionModalVisible, setIsActionModalVisible] = useState(false);
-  const [activityStep, setActivityStep] = useState('menu'); // menu, flashcard, quiz, code
+  const [activityStep, setActivityStep] = useState('menu'); // menu, flashcard, quiz, code, library
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
   const [activeTermContext, setActiveTermContext] = useState({ dayIndex: null, taskIndex: null });
+  const [savedSets, setSavedSets] = useState([]);
+  const [isCooldown, setIsCooldown] = useState(false);
 
   useEffect(() => {
     if (backendToken) {
@@ -102,15 +105,33 @@ export default function AdaptiveLearningScreen() {
     }
   };
 
-  const handleOpenActionModal = async (term, dayIndex = null, taskIndex = null) => {
+  const fetchSavedSets = async (term) => {
+    try {
+      const res = await fetch(`${backendUrl}/api/adaptive/existing-modules?term=${encodeURIComponent(term)}`, {
+        headers: { Authorization: `Bearer ${backendToken}` }
+      });
+      const data = await res.json();
+      setSavedSets(data || []);
+    } catch (err) {
+      console.log('Failed to fetch saved modules', err);
+    }
+  };
+
+  const handleOpenActionModal = (term, dayIdx, taskIdx) => {
     setSelectedTerm(term);
-    setActiveTermContext({ dayIndex, taskIndex });
-    setIsActionModalVisible(true);
-    setActivityStep('menu');
+    setActiveTermContext({ dayIndex: dayIdx, taskIndex: taskIdx });
     setInteractiveContent(null);
-    setQuizScore(0);
-    
+    setActivityStep('menu');
+    setSavedSets([]);
+    setIsActionModalVisible(true);
+    fetchSavedSets(term);
+  };
+
+  const handleGenerateContent = async () => {
+    if (isCooldown) return;
     setIsActionLoading(true);
+    setIsCooldown(true);
+    
     try {
       const res = await fetch(`${backendUrl}/api/adaptive/generate-interactive-content`, {
         method: 'POST',
@@ -119,17 +140,40 @@ export default function AdaptiveLearningScreen() {
           Authorization: `Bearer ${backendToken}`,
           'x-gemini-api-key': apiKey || ''
         },
-        body: JSON.stringify({ term })
+        body: JSON.stringify({ term: selectedTerm })
       });
+      
       const data = await res.json();
+      
       if (res.ok) {
         setInteractiveContent(data);
+      } else {
+        throw new Error(data.message || 'AI đang bận, vui lòng thử lại sau');
       }
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Lỗi', text2: 'Không thể tải nội dung học tập' });
+      console.error('[AI Error]', err);
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Lỗi AI', 
+        text2: err.message 
+      });
+      setActivityStep('menu');
     } finally {
       setIsActionLoading(false);
+      setTimeout(() => setIsCooldown(false), 5000);
     }
+  };
+
+  const useSavedSet = (mod) => {
+    // Map Unified LearningModule to the interactiveContent structure
+    setInteractiveContent({
+      flashcard: mod.flashcard,
+      quiz: mod.quiz,
+      codeChallenge: mod.codeChallenge
+    });
+    // Stay in menu or auto-switch to a mode? 
+    // Let's set it to flashcard by default but keep current state if user clicks from modal
+    setActivityStep('flashcard'); 
   };
 
   const handleSubmitActivity = async (points, activityType) => {
@@ -703,57 +747,96 @@ export default function AdaptiveLearningScreen() {
   );
 
   const renderActionModal = () => (
-    <Modal visible={isActionModalVisible} transparent animationType="slide" onRequestClose={() => setIsActionModalVisible(false)}>
+    <Modal visible={isActionModalVisible} transparent animationType="fade" onRequestClose={() => setIsActionModalVisible(false)}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.actionModal, { minHeight: 400 }]}>
+        <View style={[styles.actionModal, { minHeight: 450 }]}>
           <View style={styles.actionHeader}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.actionLabel}>Chủ đề: {selectedTerm}</Text>
               <Text style={styles.actionTitle}>
-                {activityStep === 'menu' ? 'Chọn chế độ học' : 
-                 activityStep === 'flashcard' ? 'Flashcard thông minh' : 
-                 activityStep === 'quiz' ? 'Bài test nhanh (3 câu)' : 'Thử thách Code'}
+                {activityStep === 'menu' ? 'Học tập thông minh' : 
+                 activityStep === 'flashcard' ? 'Flashcard' : 
+                 activityStep === 'quiz' ? 'Kiểm tra nhanh' : 
+                 activityStep === 'library' ? 'Bộ thẻ đã học' : 'Thử thách Code'}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setIsActionModalVisible(false)} style={styles.closeBtn}>
-              <X size={20} color="#64748b" />
+              <X size={24} color="#64748b" />
             </TouchableOpacity>
           </View>
 
           {isActionLoading ? (
-            <View style={styles.actionLoading}><ActivityIndicator size="large" color="#6366f1" /><Text style={styles.loadingText}>AI đang chuẩn bị...</Text></View>
+            <View style={styles.actionLoading}>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <LogOut size={40} color="#e2e8f0" style={{ position: 'absolute', opacity: 0.1 }} />
+              <Text style={styles.loadingText}>AI đang phân tích kiến thức...</Text>
+            </View>
           ) : (
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingBottom: 20 }}>
               {activityStep === 'menu' && (
-                <View style={styles.menuGrid}>
-                  <TouchableOpacity style={styles.menuItem} onPress={() => setActivityStep('flashcard')}>
-                    <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.menuIcon}><BookOpen size={24} color="white" /></LinearGradient>
-                    <Text style={styles.menuText}>Flashcard</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.menuItem} onPress={() => setActivityStep('quiz')}>
-                    <LinearGradient colors={['#10b981', '#059669']} style={styles.menuIcon}><Target size={24} color="white" /></LinearGradient>
-                    <Text style={styles.menuText}>Kiểm tra</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.menuItem} onPress={() => setActivityStep('code')}>
-                    <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.menuIcon}><CodeIcon size={24} color="white" /></LinearGradient>
-                    <Text style={styles.menuText}>Dòng Code</Text>
-                  </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.menuGrid}>
+                    <TouchableOpacity 
+                      disabled={isCooldown}
+                      style={[styles.menuItem, isCooldown && { opacity: 0.5 }]} 
+                      onPress={() => { setActivityStep('flashcard'); handleGenerateContent(); }}
+                    >
+                      <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.menuIcon}><BookOpen size={24} color="white" /></LinearGradient>
+                      <Text style={styles.menuText}>Flashcard AI</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      disabled={isCooldown}
+                      style={[styles.menuItem, isCooldown && { opacity: 0.5 }]} 
+                      onPress={() => { setActivityStep('quiz'); handleGenerateContent(); }}
+                    >
+                      <LinearGradient colors={['#10b981', '#059669']} style={styles.menuIcon}><Target size={24} color="white" /></LinearGradient>
+                      <Text style={styles.menuText}>Bài Quiz</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      disabled={isCooldown}
+                      style={[styles.menuItem, isCooldown && { opacity: 0.5 }]} 
+                      onPress={() => { setActivityStep('code'); handleGenerateContent(); }}
+                    >
+                      <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.menuIcon}><CodeIcon size={24} color="white" /></LinearGradient>
+                      <Text style={styles.menuText}>Ghi Code</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {savedSets.length > 0 && (
+                    <View style={styles.libraryPreview}>
+                      <View style={styles.libHeader}>
+                        <Layers size={14} color="#6366f1" />
+                        <Text style={styles.libTitle}>Bộ thẻ đã lưu ({savedSets.length})</Text>
+                      </View>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {savedSets.map((mod, sid) => (
+                          <TouchableOpacity key={sid} style={styles.libCard} onPress={() => useSavedSet(mod)}>
+                            <Text style={styles.libCardText} numberOfLines={2}>{mod.flashcard?.front || mod.term}</Text>
+                            <View style={styles.libCardFooter}>
+                               <BookOpen size={10} color="#94a3b8" />
+                               <Text style={styles.libBadgeText}>Full Module</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
                 </View>
               )}
 
               {activityStep === 'flashcard' && interactiveContent?.flashcard && (
-                <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.flashcardView}>
+                <View style={styles.flashcardView}>
                    <View style={styles.flashcard}>
-                      <Text style={styles.fcLabel}>CÂU HỎI</Text>
+                      <Text style={styles.fcLabel}>GHI NHỚ</Text>
                       <Text style={styles.fcFront}>{interactiveContent.flashcard.front}</Text>
                       <View style={styles.fcDivider} />
-                      <Text style={styles.fcLabel}>ĐÁP ÁN</Text>
+                      <Text style={styles.fcLabel}>GIẢI THÍCH</Text>
                       <Text style={styles.fcBack}>{interactiveContent.flashcard.back}</Text>
                    </View>
                    <TouchableOpacity style={styles.submitAciBtn} onPress={() => handleSubmitActivity(30, 'flashcard')}>
                       <Text style={styles.submitAciText}>Đã hiểu bài (+30 Power)</Text>
                    </TouchableOpacity>
-                </MotiView>
+                </View>
               )}
 
               {activityStep === 'quiz' && interactiveContent?.quiz && (
@@ -1055,4 +1138,11 @@ const styles = StyleSheet.create({
   masteredBadge: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
   taskLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   percentageText: { fontSize: 10, fontWeight: '900' },
+  libraryPreview: { marginTop: 24, padding: 16, backgroundColor: '#f8fafc', borderRadius: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  libHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  libTitle: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
+  libCard: { backgroundColor: 'white', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', width: 140, marginRight: 10, justifyContent: 'space-between' },
+  libCardText: { fontSize: 11, color: '#475569', marginBottom: 8, lineHeight: 14 },
+  libCardFooter: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  libBadgeText: { fontSize: 9, color: '#94a3b8', fontWeight: 'bold' }
 });

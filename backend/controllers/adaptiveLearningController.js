@@ -5,7 +5,12 @@ const { syncToRag } = require('../utils/ragSync');
 const LearningActivity = require('../models/LearningActivity');
 const User = require('../models/User');
 const SkillAchievement = require('../models/SkillAchievement');
+const FlashcardSet = require('../models/FlashcardSet');
+const LearningModule = require('../models/LearningModule');
 const mongoose = require('mongoose');
+
+// In-memory lock for RPM control (Term-level)
+const activeGenerations = new Set();
 
 // Helper to get Gemini AI instance
 const getAI = (req) => {
@@ -113,16 +118,12 @@ const deepSanitize = (data) => {
 
 // Retry helper for API Rate Limits (RPM) with Schema support
 const generateWithRetry = async (ai, model, prompt, schema = null, maxRetries = 3) => {
+  const models = [model, 'gemini-1.5-flash', 'gemini-1.5-pro'];
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const config = {};
-      if (schema) {
-        config.responseMimeType = "application/json";
-        config.responseSchema = schema;
-      }
-
+      const config = schema ? { responseMimeType: "application/json", responseSchema: schema } : {};
       const response = await ai.models.generateContent({
-        model: model,
+        model: models[(attempt - 1) % models.length],
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: config
       });
@@ -339,13 +340,29 @@ exports.deleteRoadmap = async (req, res) => {
 };
 
 exports.generateInteractiveContent = async (req, res) => {
-  try {
-    const { term } = req.body;
-    const userId = req.user._id;
+  const { term } = req.body;
+  const userId = req.user._id;
+  const lockKey = `${userId}-${term}`;
 
+  try {
     if (!term) return res.status(400).json({ message: 'Term is required' });
 
-    // Retrieve context about this specific term
+    // 1. Check if we already have this Unified Learning Module
+    const existingModule = await LearningModule.findOne({ user: userId, term: term });
+    if (existingModule) {
+      console.log(`[DB] Cache Hit: Returning existing LearningModule for: ${term}`);
+      return res.status(200).json(existingModule);
+    }
+
+    // 2. RPM Lock
+    if (activeGenerations.has(lockKey)) {
+      return res.status(429).json({ message: 'Đang tạo nội dung, vui lòng đợi giây lát...' });
+    }
+    activeGenerations.add(lockKey);
+
+    console.log(`\n--- [AI GENERATION START] ---`);
+    console.log(`Term: ${term} | User: ${userId}`);
+
     const contextResults = await RAGService.retrieve(term, userId.toString(), { limit: 5 });
     const contextString = RAGService.formatContext(contextResults);
 
@@ -355,7 +372,7 @@ exports.generateInteractiveContent = async (req, res) => {
     2. A 3-question Quiz with options
     3. A Code Writing Challenge (if applicable, else a logic puzzle)
 
-    Format as JSON.`;
+    IMPORTANT: Response MUST be pure valid JSON only.`;
 
     const schema = {
       type: Type.OBJECT,
@@ -392,20 +409,94 @@ exports.generateInteractiveContent = async (req, res) => {
       required: ["flashcard", "quiz", "codeChallenge"]
     };
 
-    const response = await generateWithRetry(ai, 'gemini-1.5-flash-latest', prompt, schema);
-    if (!response || !response.text) {
-       throw new Error('AI returned an empty response');
-    }
-    const content = smartParse(response.text);
+    let content = null;
+    const modelsList = ['gemini-3-flash-preview', 'gemini-1.5-flash-latest'];
 
-    res.status(200).json(content);
-  } catch (error) {
-    console.error('Error generating interactive content:', error);
-    res.status(500).json({ 
-      message: 'Failed to generate interactive content', 
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    // --- STRATEGY 1: JSON Schema Mode (Loop through models) ---
+    for (const modelName of modelsList) {
+      if (content) break; 
+      try {
+        console.log(`[AI] Strategy 1: Attempting JSON Schema Mode with ${modelName}...`);
+        const config = {
+          responseMimeType: "application/json",
+          responseSchema: schema
+        };
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: config
+        });
+        
+        if (response && response.text) {
+          content = smartParse(response.text);
+        }
+      } catch (schemaErr) {
+        console.warn(`[AI WARN] Strategy 1 failed for ${modelName}: ${schemaErr.message}`);
+      }
+    }
+
+    // --- STRATEGY 2: Fallback to Raw Text Mode ---
+    if (!content) {
+      const stableModel = 'gemini-1.5-flash-latest';
+      console.log(`[AI] Strategy 2: Attempting Raw Text Fallback with ${stableModel}...`);
+      try {
+        const rawResponse = await ai.models.generateContent({
+          model: stableModel,
+          contents: [{ role: 'user', parts: [{ text: prompt + "\nFormat as a flat JSON object." }] }]
+        });
+        if (rawResponse && rawResponse.text) {
+          content = smartParse(rawResponse.text);
+        }
+      } catch (fallbackErr) {
+        console.error(`[AI ERROR] Strategy 2 failed: ${fallbackErr.message}`);
+      }
+    }
+
+    if (!content) {
+      throw new Error('AI failed to return valid content in both Schema and Fallback mode.');
+    }
+
+    console.log(`[AI SUCCESS] Content generated for: ${term}`);
+
+    // 3. PERSISTENCE: Save to Unified LearningModule
+    const newModule = new LearningModule({
+      user: userId,
+      term: term,
+      flashcard: content.flashcard,
+      quiz: content.quiz,
+      codeChallenge: content.codeChallenge
     });
+    await newModule.save();
+    console.log(`[DB] Unified LearningModule saved: ${newModule._id}`);
+
+    res.status(200).json(newModule);
+  } catch (error) {
+    console.error(`\n--- [AI ERROR] ---`);
+    console.error(`Term: ${term} | Error: ${error.message}`);
+    res.status(500).json({ message: 'Failed to generate interactive content', error: error.message });
+  } finally {
+    activeGenerations.delete(lockKey);
+    console.log(`--- [AI END] ---\n`);
+  }
+};
+
+exports.getExistingModules = async (req, res) => {
+  try {
+    const { term } = req.query;
+    const userId = req.user._id;
+
+    if (!term) return res.status(400).json({ message: 'Term is required' });
+
+    // Find modules for this specific term
+    const modules = await LearningModule.find({
+      user: userId,
+      term: { $regex: new RegExp(term, 'i') }
+    }).sort({ createdAt: -1 }).limit(5);
+
+    res.status(200).json(modules);
+  } catch (error) {
+    console.error('Error fetching existing modules:', error);
+    res.status(500).json({ message: 'Failed to fetch existing modules' });
   }
 };
 

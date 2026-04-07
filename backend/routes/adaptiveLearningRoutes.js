@@ -27,5 +27,6 @@ router.delete('/roadmap/:id', adaptiveLearningController.deleteRoadmap);
 // NEW: Interactive content endpoints
 router.post('/generate-interactive-content', adaptiveLearningController.generateInteractiveContent);
 router.post('/submit-activity-score', adaptiveLearningController.submitActivityScore);
+router.get('/existing-modules', adaptiveLearningController.getExistingModules);
 
 module.exports = router;
