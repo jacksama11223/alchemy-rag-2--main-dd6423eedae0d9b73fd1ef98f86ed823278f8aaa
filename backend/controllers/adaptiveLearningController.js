@@ -2,6 +2,10 @@ const { GoogleGenAI, Type } = require('@google/genai');
 const AdaptiveLearning = require('../models/AdaptiveLearning');
 const RAGService = require('../services/RAGService');
 const { syncToRag } = require('../utils/ragSync');
+const LearningActivity = require('../models/LearningActivity');
+const User = require('../models/User');
+const SkillAchievement = require('../models/SkillAchievement');
+const mongoose = require('mongoose');
 
 // Helper to get Gemini AI instance
 const getAI = (req) => {
@@ -60,9 +64,10 @@ const analysisSchema = {
               },
               required: ["title", "link", "type"]
             }
-          }
+          },
+          tags: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
-        required: ["day", "title", "tasks", "resources"]
+        required: ["day", "title", "tasks", "resources", "tags"]
       }
     }
   },
@@ -143,9 +148,10 @@ exports.generateTest = async (req, res) => {
 
     const contextResults = await RAGService.retrieve(topic, userId.toString(), { limit: 10 });
     const contextString = RAGService.formatContext(contextResults);
+    const competencyContext = await RAGService.injectCompetencyContext(userId);
     const ai = getAI(req);
     
-    const prompt = `Create a challenging 5-10 question multiple-choice test about "${topic}" based on this context:\n${contextString}`;
+    const prompt = `${competencyContext}Create a challenging 5-10 question multiple-choice test about "${topic}" based on this context:\n${contextString}`;
 
     const response = await generateWithRetry(ai, 'gemini-3-flash-preview', prompt, testSchema);
     
@@ -197,7 +203,12 @@ exports.submitTest = async (req, res) => {
     session.userResults = { score, totalQuestions: session.testContent.length, answers: evaluatedAnswers, completedAt: new Date() };
 
     const ai = getAI(req);
-    const analysisPrompt = `Analyze test results for "${session.topic}" and create a 7-day roadmap.\nTEST DATA: ${JSON.stringify({ questions: session.testContent.map(q => ({ question: q.question, tags: q.tags })), results: evaluatedAnswers })}`;
+    const competencyContext = await RAGService.injectCompetencyContext(userId);
+    const analysisPrompt = `${competencyContext}Analyze test results for "${session.topic}" and create a 7-day roadmap.\nTEST DATA: ${JSON.stringify({ questions: session.testContent.map(q => ({ question: q.question, tags: q.tags })), results: evaluatedAnswers })}\n\nIMPORTANT FORMATTING RULES:
+    1. Mark at least 2-3 key technical terms in each task using double brackets like [[React Hooks]] or [[Closure]].
+    2. These bracketed terms MUST become interactive study points.
+    3. Also include these technical terms in the "tags" array for each roadmap day.
+    4. Use the User Competency context to skip basic topics they already know (>70% proficiency).`;
 
     const analysisResponse = await generateWithRetry(ai, 'gemini-3-flash-preview', analysisPrompt, analysisSchema);
     
@@ -324,5 +335,157 @@ exports.deleteRoadmap = async (req, res) => {
   } catch (error) {
     console.error('Error deleting roadmap:', error);
     res.status(500).json({ message: 'Failed to delete roadmap' });
+  }
+};
+
+exports.generateInteractiveContent = async (req, res) => {
+  try {
+    const { term } = req.body;
+    const userId = req.user._id;
+
+    if (!term) return res.status(400).json({ message: 'Term is required' });
+
+    // Retrieve context about this specific term
+    const contextResults = await RAGService.retrieve(term, userId.toString(), { limit: 5 });
+    const contextString = RAGService.formatContext(contextResults);
+
+    const ai = getAI(req);
+    const prompt = `Create a learning session for the term "[[${term}]]" based on this context:\n${contextString}\n\nProvide 3 things:
+    1. A Flashcard (Front & Back)
+    2. A 3-question Quiz with options
+    3. A Code Writing Challenge (if applicable, else a logic puzzle)
+
+    Format as JSON.`;
+
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        flashcard: {
+          type: Type.OBJECT,
+          properties: { front: { type: Type.STRING }, back: { type: Type.STRING } },
+          required: ["front", "back"]
+        },
+        quiz: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              correctAnswer: { type: Type.STRING },
+              explanation: { type: Type.STRING }
+            },
+            required: ["question", "options", "correctAnswer", "explanation"]
+          }
+        },
+        codeChallenge: {
+          type: Type.OBJECT,
+          properties: {
+             problem: { type: Type.STRING },
+             startCode: { type: Type.STRING },
+             solution: { type: Type.STRING },
+             hints: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["problem", "startCode", "solution"]
+        }
+      },
+      required: ["flashcard", "quiz", "codeChallenge"]
+    };
+
+    const response = await generateWithRetry(ai, 'gemini-1.5-flash-latest', prompt, schema);
+    if (!response || !response.text) {
+       throw new Error('AI returned an empty response');
+    }
+    const content = smartParse(response.text);
+
+    res.status(200).json(content);
+  } catch (error) {
+    console.error('Error generating interactive content:', error);
+    res.status(500).json({ 
+      message: 'Failed to generate interactive content', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+exports.submitActivityScore = async (req, res) => {
+  try {
+    const { points, activityType, term, roadmapId, dayIndex, taskIndex } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // 1. Save Activity Log
+    const activity = new LearningActivity({
+      userId,
+      term,
+      activityType,
+      score: points,
+      totalPoints: activityType === 'code' ? 100 : activityType === 'quiz' ? 50 : 30,
+      status: points > 0 ? 'completed' : 'failed'
+    });
+    await activity.save();
+
+    // 2. Update Brain Power & Level
+    user.brainPower = (user.brainPower || 0) + points;
+    if (user.brainPower > 5000) user.brainLevel = 'Legend';
+    else if (user.brainPower > 2500) user.brainLevel = 'Master';
+    else if (user.brainPower > 1000) user.brainLevel = 'Expert';
+    else if (user.brainPower > 500) user.brainLevel = 'Advanced';
+    else if (user.brainPower > 200) user.brainLevel = 'Intermediate';
+    await user.save();
+
+    // 3. Update Skill Proficiency (Semantic Boost)
+    const skill = await SkillAchievement.findOne({ userId, name: { $regex: new RegExp(term, 'i') }, level: 'child' });
+    if (skill) {
+      // Increase proficiency by a small amount for each study activity
+      const boost = activityType === 'code' ? 5 : activityType === 'quiz' ? 3 : 1;
+      skill.proficiency = Math.min(100, skill.proficiency + boost);
+      if (!skill.masteredTopics.some(t => t.topic === term)) {
+        skill.masteredTopics.push({ topic: term, depth: 'deep', completedAt: new Date() });
+      }
+      await skill.save();
+    }
+
+    // 4. Update Roadmap Task Mastery & Proficiency
+    if (roadmapId && dayIndex !== undefined && taskIndex !== undefined) {
+       const roadmap = await AdaptiveLearning.findOne({ _id: roadmapId, userId });
+       if (roadmap && roadmap.roadmap[dayIndex]) {
+          const day = roadmap.roadmap[dayIndex];
+          if (!day.taskStats) day.taskStats = [];
+          
+          let stat = day.taskStats.find(s => s.taskIndex === taskIndex);
+          
+          // Calculate activity proficiency (points earned / potential points)
+          const maxPoints = activityType === 'code' ? 100 : activityType === 'quiz' ? 50 : 30;
+          const currentProficiency = Math.round((points / maxPoints) * 100);
+
+          if (!stat) {
+            day.taskStats.push({
+              taskIndex,
+              proficiency: currentProficiency,
+              attempts: 1,
+              lastAttempt: new Date()
+            });
+          } else {
+            // Update logic: Take the highest proficiency achieved so far
+            stat.proficiency = Math.max(stat.proficiency, currentProficiency);
+            stat.attempts += 1;
+            stat.lastAttempt = new Date();
+          }
+          await roadmap.save();
+       }
+    }
+
+    res.status(200).json({ 
+      message: 'Activity recorded and power gained', 
+      brainPower: user.brainPower,
+      brainLevel: user.brainLevel
+    });
+  } catch (error) {
+    console.error('Error submitting activity score:', error);
+    res.status(500).json({ message: 'Failed to submit score' });
   }
 };

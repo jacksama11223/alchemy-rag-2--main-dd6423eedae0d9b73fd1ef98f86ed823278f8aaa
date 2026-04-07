@@ -24,4 +24,8 @@ router.patch('/rename-roadmap/:id', adaptiveLearningController.renameRoadmap);
 // DELETE a roadmap
 router.delete('/roadmap/:id', adaptiveLearningController.deleteRoadmap);
 
+// NEW: Interactive content endpoints
+router.post('/generate-interactive-content', adaptiveLearningController.generateInteractiveContent);
+router.post('/submit-activity-score', adaptiveLearningController.submitActivityScore);
+
 module.exports = router;

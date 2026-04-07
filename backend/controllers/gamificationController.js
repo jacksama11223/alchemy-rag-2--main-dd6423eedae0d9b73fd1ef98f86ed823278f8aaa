@@ -127,6 +127,30 @@ const getSkillAchievements = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+const getSecondBrainStats = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select('brainPower brainLevel topSkills xp level lp rankTier');
+  const achievements = await SkillAchievement.find({ userId: req.user._id });
+  
+  const totalSkills = achievements.length;
+  const masteredSkills = achievements.filter(s => s.proficiency >= 80).length;
+  const averageProficiency = totalSkills > 0 
+    ? Math.round(achievements.reduce((acc, s) => acc + s.proficiency, 0) / totalSkills) 
+    : 0;
+
+  res.json({
+    brainPower: user.brainPower || 0,
+    brainLevel: user.brainLevel || 'Novice',
+    topSkills: user.topSkills || [],
+    totalSkills,
+    masteredSkills,
+    averageProficiency,
+    xp: user.xp,
+    level: user.level,
+    lp: user.lp,
+    rankTier: user.rankTier
+  });
+});
+
 // Background internal function to sync skills based on RAG knowledge
 const syncSkillAchievementsInternal = async (userId, topic, analysis, req) => {
   try {
@@ -134,19 +158,24 @@ const syncSkillAchievementsInternal = async (userId, topic, analysis, req) => {
     if (!apiKey) return;
 
     const ai = new GoogleGenAI(apiKey);
-    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = ai.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
     // Retrieve full RAG context for this user & topic to assess depth
     const contextResults = await RAGService.retrieve(topic, userId.toString(), { limit: 15 });
     const contextString = RAGService.formatContext(contextResults);
 
-    const prompt = `Assess the user's proficiency in "${topic}" based on their learning history and this RAG context:\n${contextString}\n\nAnalysis from test: ${JSON.stringify(analysis)}\n\nOutput a JSON object with:
+    // Get existing achievements to check for semantic overlap
+    const existingSkills = await SkillAchievement.find({ userId }).select('name level').lean();
+    const skillListStr = existingSkills.map(s => `${s.name} (${s.level})`).join(', ');
+
+    const prompt = `Assess the user's proficiency in "${topic}" based on their learning history and this RAG context:\n${contextString}\n\nAnalysis from test: ${JSON.stringify(analysis)}\n\nExisting Skills: ${skillListStr}\n\nIMPORTANT: If the new skill name is semantically identical or very similar to an existing skill (e.g. "ReactJS" vs "React"), use the EXISTING skill name to avoid duplicates.\n\nOutput a JSON object with:
     {
       "parentSkill": "Main category (e.g., Programming)",
       "childSkill": "Specific skill (e.g., React)",
       "proficiency": (0-100),
       "reasoning": "Brief explanation",
-      "masteredTopics": ["Topic 1", "Topic 2"]
+      "masteredTopics": ["Topic 1", "Topic 2"],
+      "brainPowerGain": (number of points earned for this update, e.g. 10-50)
     }`;
 
     const response = await model.generateContent(prompt);
@@ -193,7 +222,27 @@ const syncSkillAchievementsInternal = async (userId, topic, analysis, req) => {
     parent.proficiency = avgProficiency;
     await parent.save();
 
-    console.log(`[SkillSync] Synced skill "${data.childSkill}" for user ${userId}`);
+    // 4. Update User Brain Power & Level
+    const user = await User.findById(userId);
+    if (user) {
+      user.brainPower = (user.brainPower || 0) + (data.brainPowerGain || 20);
+      
+      // Update Brain Level based on Power
+      if (user.brainPower > 5000) user.brainLevel = 'Legend';
+      else if (user.brainPower > 2500) user.brainLevel = 'Master';
+      else if (user.brainPower > 1000) user.brainLevel = 'Expert';
+      else if (user.brainPower > 500) user.brainLevel = 'Advanced';
+      else if (user.brainPower > 200) user.brainLevel = 'Intermediate';
+      else user.brainLevel = 'Novice';
+
+      // Update Top Skills (top 3 by proficiency)
+      const allChildren = await SkillAchievement.find({ userId, level: 'child' }).sort({ proficiency: -1 }).limit(3);
+      user.topSkills = allChildren.map(s => s.name);
+      
+      await user.save();
+    }
+
+    console.log(`[SkillSync] Synced skill "${data.childSkill}" for user ${userId}. Gain: ${data.brainPowerGain}`);
   } catch (error) {
     console.error('[SkillSync] Error during background sync:', error);
   }
@@ -203,5 +252,7 @@ module.exports = {
   addXP, updateRank,
   getQuests, createQuest, updateQuest, deleteQuest,
   getAchievements, createAchievement, updateAchievement,
-  getSkillAchievements, syncSkillAchievementsInternal
+  getSkillAchievements, 
+  getSecondBrainStats,
+  syncSkillAchievementsInternal
 };

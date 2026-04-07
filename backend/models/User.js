@@ -35,6 +35,10 @@ const userSchema = mongoose.Schema({
     weekly: { type: Number, default: 0 },
     monthly: { type: Number, default: 0 }
   },
+  // Second Brain Stats
+  brainPower: { type: Number, default: 0 },
+  brainLevel: { type: String, default: 'Novice' }, // Novice, Intermediate, Advanced, Expert, Master, Legend
+  topSkills: [{ type: String }],
   matchHistory: [{
     result: { type: String, enum: ['Victory', 'Defeat'] },
     lpChange: { type: Number },

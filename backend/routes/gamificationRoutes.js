@@ -5,18 +5,22 @@ const {
   addXP, updateRank,
   getQuests, createQuest, updateQuest, deleteQuest,
   getAchievements, createAchievement, updateAchievement,
-  getSkillAchievements
+  getSkillAchievements,
+  getSecondBrainStats
 } = require('../controllers/gamificationController');
 
-router.route('/xp').post(protect, addXP);
-router.route('/rank').post(protect, updateRank);
+router.use(protect);
 
-router.route('/quests').get(protect, getQuests).post(protect, createQuest);
-router.route('/quests/:id').put(protect, updateQuest).delete(protect, deleteQuest);
+router.route('/xp').post(addXP);
+router.route('/rank').post(updateRank);
 
-router.route('/achievements').get(protect, getAchievements).post(protect, createAchievement);
-router.route('/achievements/:id').put(protect, updateAchievement);
+router.route('/quests').get(getQuests).post(createQuest);
+router.route('/quests/:id').put(updateQuest).delete(deleteQuest);
 
-router.route('/skill-achievements').get(protect, getSkillAchievements);
+router.route('/achievements').get(getAchievements).post(createAchievement);
+router.route('/achievements/:id').put(updateAchievement);
+
+router.route('/skill-achievements').get(getSkillAchievements);
+router.route('/second-brain').get(getSecondBrainStats);
 
 module.exports = router;

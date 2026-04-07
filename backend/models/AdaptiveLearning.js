@@ -45,7 +45,13 @@ const adaptiveLearningSchema = new mongoose.Schema({
     title: String,
     tasks: [String],
     resources: [resourceSchema],
-    isCompleted: { type: Boolean, default: false }
+    isCompleted: { type: Boolean, default: false },
+    taskStats: [{
+      taskIndex: Number,
+      proficiency: { type: Number, default: 0 },
+      attempts: { type: Number, default: 0 },
+      lastAttempt: Date
+    }]
   }],
   status: {
     type: String,

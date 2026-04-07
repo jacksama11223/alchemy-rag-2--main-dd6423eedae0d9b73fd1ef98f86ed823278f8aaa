@@ -77,7 +77,7 @@ Nhiệm vụ của bạn là lấy toàn bộ văn bản có trong bức ảnh n
 - BẮT BUỘC: Nếu là danh sách, hãy dùng gạch đầu dòng (-).
 TUYỆT ĐỐI GHI NHỚ: Không được thêm bất kỳ câu giao tiếp, lời chào hỏi, hay giải thích nào. Bạn chỉ là một cái máy dịch. CHỈ trả về đúng đoạn văn bản Markdown thuần túy.`;
 
-    const modelsList = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    const modelsList = ['gemini-3-flash-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-flash-latest'];
     let responseText = null;
     let lastError = null;
 

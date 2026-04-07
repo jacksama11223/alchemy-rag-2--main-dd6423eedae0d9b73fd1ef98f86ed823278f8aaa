@@ -3,6 +3,8 @@ const VectorStore = require('../models/VectorStore');
 const KnowledgeIndex = require('../models/KnowledgeIndex');
 const { parseQueryKeywords } = require('../utils/keywordExtractor');
 const mongoose = require('mongoose');
+const User = require('../models/User');
+const SkillAchievement = require('../models/SkillAchievement');
 
 let extractorPipeline = null;
 
@@ -18,6 +20,33 @@ class RAGService {
   async getLocalEmbedding(text) {
     return await getLocalEmbeddingGlobal(text);
   }
+
+  async getUserBrainContext(userId) {
+    try {
+      const user = await User.findById(userId).select('brainLevel topSkills brainPower');
+      if (!user) return '';
+      return `[USER SECOND BRAIN PROFILE]\nLevel: ${user.brainLevel || 'Novice'}\nPower: ${user.brainPower || 0}\nTop Skills: ${(user.topSkills || []).join(', ') || 'None yet'}\n\n`;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  async injectCompetencyContext(userId) {
+    try {
+      const skills = await SkillAchievement.find({ userId, level: 'child' })
+        .sort({ proficiency: -1 })
+        .limit(10)
+        .lean();
+      
+      if (!skills || skills.length === 0) return "[USER COMPETENCY: Novice - No existing data]";
+      
+      const skillSummary = skills.map(s => `${s.name}: ${s.proficiency}%`).join(', ');
+      return `[USER COMPETENCY MATRIX]\nMastered/Learning Skills: ${skillSummary}\nUse this to tailor complexity. Skip basics for skills > 70%.\n\n`;
+    } catch (e) {
+      return '';
+    }
+  }
+
   async retrieve(query, userId, options = {}) {
     const { limit = 5, sourceType, originalDocId } = options;
     let combinedResults = [];
@@ -114,7 +143,6 @@ class RAGService {
     }
   }
 
-  // Local TF-IDF style sentence extractor to save 80% input tokens when passing context
   extractRelevantSentences(text, query) {
     if (!text || !query) return text;
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
@@ -146,7 +174,6 @@ class RAGService {
         content = this.extractRelevantSentences(content, originalQuery);
       }
       
-      // Categorical Labeling for LLM
       const sType = doc.metadata?.sourceType;
       let label = 'TÀI LIỆU';
       
