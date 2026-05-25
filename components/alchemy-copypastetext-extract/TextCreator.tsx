@@ -110,3 +110,4 @@ const TextCreator: React.FC<TextCreatorProps> = ({ onTextCreated, onCancel }) =>
 };
 
 export default TextCreator;
+
