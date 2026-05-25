@@ -23,7 +23,7 @@ import {
 } from '../types';
 
 // API Configuration
-const API_URL = import.meta.env.VITE_API_URL || '/api'; 
+const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'; 
 
 export const getAuthHeader = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
