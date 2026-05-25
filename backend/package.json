@@ -4,8 +4,7 @@
   "description": "Backend API for LearnAI",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon server.js",
-    "server": "nodemon server.js",
+    "start": "node server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
