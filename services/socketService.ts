@@ -5,7 +5,8 @@ class SocketService {
 
     connect() {
         if (!this.socket) {
-            this.socket = io('/', {
+            const socketUrl = import.meta.env.VITE_API_URL || '/';
+            this.socket = io(socketUrl, {
                 withCredentials: true,
                 autoConnect: true
             });

@@ -47,8 +47,8 @@ interface Category {
 
 type OceanTheme = 'abyss' | 'coral' | 'sunset';
 
-// Use relative path for socket to leverage Vite Proxy
-const SOCKET_URL = '/'; 
+// Use environment variable for socket URL in production
+const SOCKET_URL = import.meta.env.VITE_API_URL || '/';
 
 // --- THEME CONFIGURATIONS ---
 const THEMES: Record<OceanTheme, {
@@ -354,13 +354,8 @@ export const StudyDiscord: React.FC<{ onExit: () => void, targetUser?: UserAccou
 
             // Initialize Peer
             import('peerjs').then(({ default: Peer }) => {
-                // Configure PeerJS to go through our Vite Proxy to avoid CORS/Mixed Content
-                const peer = new Peer(undefined as any, {
-                    host: window.location.hostname,
-                    port: window.location.port ? parseInt(window.location.port) : 443,
-                    path: '/peerjs/myapp', // Proxy rewrites this to /myapp on port 9000
-                    secure: window.location.protocol === 'https:'
-                });
+                // Configure PeerJS to use public server for production compatibility
+                const peer = new Peer();
 
                 peer.on('open', (id) => {
                     console.log('📡 My Peer ID is: ' + id);

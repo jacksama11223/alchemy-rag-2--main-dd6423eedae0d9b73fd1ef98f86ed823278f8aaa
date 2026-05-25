@@ -23,8 +23,7 @@ import {
 } from '../types';
 
 // API Configuration
-// Changed to relative path to utilize Vite Proxy (handles HTTPS -> HTTP)
-const API_URL = '/api'; 
+const API_URL = import.meta.env.VITE_API_URL || '/api'; 
 
 export const getAuthHeader = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
