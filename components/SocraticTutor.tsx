@@ -521,8 +521,8 @@ const SocraticTutor: React.FC<SocraticTutorProps> = ({
                     </div>
                 )}
             </div>
-            <div className="flex items-center gap-4">
-                <button onClick={() => { setMessages([]); setSessionId(`session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`); }} className="flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/40 hover:bg-white/60 text-slate-600 transition-all shadow-sm" title="Cuộc trò chuyện mới">
+            <div className="flex items-center gap-2 md:gap-4">
+                <button onClick={() => { setMessages([]); setSessionId(`session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`); }} className="flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/40 hover:bg-white/60 text-slate-600 transition-all shadow-sm shrink-0" title="Cuộc trò chuyện mới">
                     <span className="material-symbols-outlined">add_comment</span>
                 </button>
                 <button onClick={() => setShowPersonaModal(true)} className="flex h-10 items-center justify-center gap-2 rounded-full border border-white/60 bg-white/40 hover:bg-white/60 px-4 text-sm font-bold text-slate-700 transition-all shadow-sm">
@@ -660,19 +660,19 @@ const SocraticTutor: React.FC<SocraticTutorProps> = ({
                       <NeuralBridgeWidget suggestions={bridgeSuggestions} onAction={handleBridgeAction} />
 
                       {/* Input Area (Light Glass) */}
-                      <div className="px-4 pb-6 pt-2 sm:px-6">
+                      <div className="px-2 md:px-4 pb-20 md:pb-6 pt-2 sm:px-6">
                           <div className="relative group shadow-xl rounded-full">
                               <div className="absolute inset-0 bg-gradient-to-r from-cyan-200 to-blue-200 rounded-full blur opacity-40"></div>
-                              <input 
-                                  className="relative w-full rounded-full border border-white/60 bg-white/80 py-4 pl-6 pr-40 text-base text-slate-800 placeholder-slate-400 backdrop-blur-md outline-none focus:border-cyan-400 focus:bg-white transition-all shadow-inner" 
-                                  placeholder={isListening ? "Đang lắng nghe..." : isSearchEnabled ? "Tìm kiếm Google & hỏi..." : "Nhập câu trả lời..."} 
+                               <input 
+                                  className="relative w-full rounded-full border border-white/60 bg-white/80 py-3 md:py-4 pl-4 md:pl-6 pr-[120px] md:pr-40 text-sm md:text-base text-slate-800 placeholder-slate-400 backdrop-blur-md outline-none focus:border-cyan-400 focus:bg-white transition-all shadow-inner" 
+                                  placeholder={isListening ? "Đang lắng nghe..." : isSearchEnabled ? "Tìm & hỏi..." : "Nhập câu trả lời..."} 
                                   type="text"
                                   value={input}
                                   onChange={(e) => setInput(e.target.value)}
                                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                                   disabled={isLoading || isListening}
                               />
-                              <div className="absolute inset-y-0 right-1.5 flex items-center gap-1 z-10">
+                              <div className="absolute inset-y-0 right-1 md:right-1.5 flex items-center gap-0.5 md:gap-1 z-10">
                                   <button onClick={() => setIsThinkingMode(!isThinkingMode)} className={`p-2 rounded-full transition-all ${isThinkingMode ? 'text-purple-600 bg-purple-100' : 'text-slate-400 hover:text-purple-500'}`} title="Thinking Mode (Gemini 3 Pro)">
                                       <span className="material-symbols-outlined text-xl">psychology</span>
                                   </button>
@@ -682,8 +682,8 @@ const SocraticTutor: React.FC<SocraticTutorProps> = ({
                                   <button onClick={toggleListening} className={`p-2 rounded-full transition-all ${isListening ? 'text-red-500 animate-pulse bg-red-100' : 'text-slate-400 hover:text-red-500'}`}>
                                       <span className="material-symbols-outlined text-xl">{isListening ? 'mic_off' : 'mic'}</span>
                                   </button>
-                                  <button onClick={handleSend} disabled={isLoading || !input.trim()} className={`p-2 rounded-full transition-all ${!input.trim() ? 'text-slate-300' : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg hover:shadow-cyan-400/50 hover:scale-105'}`}>
-                                      <span className="material-symbols-outlined text-xl">send</span>
+                                  <button onClick={handleSend} disabled={isLoading || !input.trim()} className={`p-1.5 md:p-2 rounded-full transition-all ${!input.trim() ? 'text-slate-300' : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg hover:shadow-cyan-400/50 hover:scale-105'}`}>
+                                      <span className="material-symbols-outlined text-lg md:text-xl ml-1">send</span>
                                   </button>
                               </div>
                           </div>
