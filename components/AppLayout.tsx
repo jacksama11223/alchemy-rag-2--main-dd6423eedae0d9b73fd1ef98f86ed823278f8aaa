@@ -43,41 +43,54 @@ const NAV_CONFIG: Record<MainTab, NavItem[]> = {
     ]
 };
 
+const TAB_CONFIG: { tab: MainTab; label: string; icon: string }[] = [
+    { tab: 'home',   label: 'Home',     icon: 'home'    },
+    { tab: 'learn',  label: 'Học tập',  icon: 'school'  },
+    { tab: 'create', label: 'Sáng tạo', icon: 'palette' },
+    { tab: 'social', label: 'Xã hội',   icon: 'groups'  },
+];
+
 export const AppLayout: React.FC<AppLayoutProps> = ({ currentView, onNavigate, children, userXP, userLevel }) => {
     const [activeTab, setActiveTab] = useState<MainTab>('home');
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
-    // Sync active tab with current view
     useEffect(() => {
-        // Find which tab contains the current view
         for (const [tab, items] of Object.entries(NAV_CONFIG)) {
             if (items.some(item => item.view === currentView)) {
                 setActiveTab(tab as MainTab);
                 return;
             }
         }
-        // Special cases or defaults
         if (['landing', 'about', 'vision', 'mission', 'story', 'team', 'contact', 'faq'].includes(currentView)) {
             setActiveTab('home');
         }
     }, [currentView]);
 
+    // Close drawer whenever the user navigates
+    useEffect(() => { setIsMobileDrawerOpen(false); }, [currentView]);
+
     const handleTabChange = (tab: MainTab) => {
         setActiveTab(tab);
-        // Navigate to the first item of the tab automatically
         onNavigate(NAV_CONFIG[tab][0].view);
+        setIsMobileDrawerOpen(true);
+    };
+
+    const handleNavItem = (view: string) => {
+        onNavigate(view);
+        setIsMobileDrawerOpen(false);
     };
 
     return (
         <div className="flex h-screen overflow-hidden bg-[#F8F9FA] dark:bg-[#101c22]">
-            {/* Sidebar */}
-            <motion.aside 
+
+            {/* ── DESKTOP SIDEBAR (md+) ──────────────────────────────────── */}
+            <motion.aside
                 initial={false}
                 animate={{ width: isSidebarCollapsed ? 80 : 260 }}
-                className="flex flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-[#15202b] shadow-sm z-20 relative"
+                className="hidden md:flex flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-[#15202b] shadow-sm z-20 relative"
             >
-                {/* Collapse Toggle */}
-                <button 
+                <button
                     onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                     className="absolute -right-3 top-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-full p-1 shadow-md z-30 hover:bg-slate-50 text-slate-500"
                 >
@@ -86,49 +99,31 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ currentView, onNavigate, c
                     </span>
                 </button>
 
-                {/* Primary Tabs (Pillars) */}
                 <div className="flex flex-col gap-2 p-3 border-b border-slate-100 dark:border-slate-700/50">
-                    {(Object.keys(NAV_CONFIG) as MainTab[]).map((tab) => {
+                    {TAB_CONFIG.map(({ tab, label, icon }) => {
                         const isActive = activeTab === tab;
-                        const config = {
-                            home: { label: 'Home', icon: 'home' },
-                            learn: { label: 'Học tập', icon: 'school' },
-                            create: { label: 'Sáng tạo', icon: 'palette' },
-                            social: { label: 'Xã hội', icon: 'groups' },
-                        }[tab];
-
                         return (
                             <button
                                 key={tab}
-                                onClick={() => handleTabChange(tab)}
+                                onClick={() => { setActiveTab(tab); onNavigate(NAV_CONFIG[tab][0].view); }}
                                 className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
-                                    isActive 
-                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold shadow-sm' 
+                                    isActive
+                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold shadow-sm'
                                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                                 }`}
-                                title={config.label}
+                                title={label}
                             >
-                                <span className={`material-symbols-outlined ${isActive ? 'filled' : ''} text-2xl`}>
-                                    {config.icon}
-                                </span>
-                                {!isSidebarCollapsed && (
-                                    <span className="text-sm font-medium whitespace-nowrap">
-                                        {config.label}
-                                    </span>
-                                )}
+                                <span className={`material-symbols-outlined ${isActive ? 'filled' : ''} text-2xl`}>{icon}</span>
+                                {!isSidebarCollapsed && <span className="text-sm font-medium whitespace-nowrap">{label}</span>}
                             </button>
                         );
                     })}
                 </div>
 
-                {/* Secondary Navigation (Contextual) */}
                 <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
                     {!isSidebarCollapsed && (
-                        <h3 className="px-3 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                            Menu
-                        </h3>
+                        <h3 className="px-3 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Menu</h3>
                     )}
-                    
                     {NAV_CONFIG[activeTab].map((item) => {
                         const isActive = currentView === item.view;
                         return (
@@ -145,39 +140,24 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ currentView, onNavigate, c
                                 <span className={`material-symbols-outlined text-[20px] ${isActive ? 'text-blue-500' : 'text-slate-400'}`}>
                                     {item.icon}
                                 </span>
-                                {!isSidebarCollapsed && (
-                                    <span className="text-sm truncate">{item.label}</span>
-                                )}
+                                {!isSidebarCollapsed && <span className="text-sm truncate">{item.label}</span>}
                                 {isActive && !isSidebarCollapsed && (
-                                    <motion.div 
-                                        layoutId="activeIndicator"
-                                        className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500"
-                                    />
+                                    <motion.div layoutId="activeIndicator" className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500" />
                                 )}
                             </button>
                         );
                     })}
                 </div>
 
-                {/* User Stats / Footer */}
                 <div className="p-4 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/20">
                     <div className={`flex ${isSidebarCollapsed ? 'flex-col' : 'flex-row'} gap-2 mb-4 justify-center`}>
-                        <button 
-                            onClick={() => onNavigate('account')} 
-                            className="p-2 rounded-lg text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-blue-500 transition-colors shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-600" 
-                            title="Cài đặt tài khoản"
-                        >
+                        <button onClick={() => onNavigate('account')} className="p-2 rounded-lg text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-blue-500 transition-colors shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-600" title="Cài đặt">
                             <span className="material-symbols-outlined text-[20px]">settings</span>
                         </button>
-                        <button 
-                            onClick={() => onNavigate('user-guide')} 
-                            className="p-2 rounded-lg text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-blue-500 transition-colors shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-600" 
-                            title="Hướng dẫn sử dụng"
-                        >
+                        <button onClick={() => onNavigate('user-guide')} className="p-2 rounded-lg text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-blue-500 transition-colors shadow-sm border border-transparent hover:border-slate-200 dark:hover:border-slate-600" title="Hướng dẫn">
                             <span className="material-symbols-outlined text-[20px]">help</span>
                         </button>
                     </div>
-
                     {!isSidebarCollapsed ? (
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-md">
@@ -186,10 +166,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ currentView, onNavigate, c
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs font-bold text-slate-500 uppercase">Cấp độ {userLevel || 1}</p>
                                 <div className="w-full h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                                    <div 
-                                        className="h-full bg-blue-500 rounded-full" 
-                                        style={{ width: `${Math.min(((userXP || 0) % 1000) / 10, 100)}%` }}
-                                    />
+                                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(((userXP || 0) % 1000) / 10, 100)}%` }} />
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-0.5 text-right">{userXP || 0} XP</p>
                             </div>
@@ -204,12 +181,87 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ currentView, onNavigate, c
                 </div>
             </motion.aside>
 
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto relative scroll-smooth" id="main-scroll-container">
-                <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 min-h-full">
+            {/* ── MAIN CONTENT ─────────────────────────────────────────────── */}
+            {/* pb-20 on mobile so content isn't hidden behind bottom nav */}
+            <main className="flex-1 overflow-y-auto relative scroll-smooth pb-20 md:pb-0" id="main-scroll-container">
+                <div className="max-w-7xl mx-auto p-3 md:p-6 lg:p-8 min-h-full">
                     {children}
                 </div>
             </main>
+
+            {/* ── MOBILE SLIDE-UP DRAWER (sub-menu) ────────────────────────── */}
+            <AnimatePresence>
+                {isMobileDrawerOpen && (
+                    <>
+                        <motion.div
+                            key="backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/40 z-30 md:hidden"
+                            onClick={() => setIsMobileDrawerOpen(false)}
+                        />
+                        <motion.div
+                            key="drawer"
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                            className="fixed bottom-16 left-0 right-0 bg-white dark:bg-[#15202b] rounded-t-3xl shadow-2xl z-40 md:hidden p-4 pb-6"
+                        >
+                            {/* Handle bar */}
+                            <div className="w-10 h-1 bg-slate-300 dark:bg-slate-600 rounded-full mx-auto mb-4" />
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-3">
+                                {TAB_CONFIG.find(t => t.tab === activeTab)?.label}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {NAV_CONFIG[activeTab].map((item) => {
+                                    const isActive = currentView === item.view;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => handleNavItem(item.view)}
+                                            className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                                                isActive
+                                                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold'
+                                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            <span className={`material-symbols-outlined text-xl ${isActive ? 'text-blue-500' : 'text-slate-400'}`}>
+                                                {item.icon}
+                                            </span>
+                                            <span className="text-sm">{item.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* ── MOBILE BOTTOM NAV BAR ─────────────────────────────────────── */}
+            <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white dark:bg-[#15202b] border-t border-slate-200 dark:border-slate-700 flex items-center justify-around z-50 md:hidden shadow-lg">
+                {TAB_CONFIG.map(({ tab, label, icon }) => {
+                    const isActive = activeTab === tab;
+                    return (
+                        <button
+                            key={tab}
+                            onClick={() => handleTabChange(tab)}
+                            className={`flex flex-col items-center justify-center gap-0.5 px-4 py-1 rounded-xl transition-all relative ${
+                                isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                        >
+                            <span className={`material-symbols-outlined text-[24px] transition-transform ${isActive ? 'filled scale-110' : ''}`}>
+                                {icon}
+                            </span>
+                            <span className={`text-[10px] font-medium ${isActive ? 'font-bold' : ''}`}>
+                                {label}
+                            </span>
+                        </button>
+                    );
+                })}
+            </nav>
         </div>
     );
 };
