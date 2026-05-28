@@ -117,7 +117,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
@@ -125,17 +125,17 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess
       ></div>
 
       {/* Modal Container */}
-      <div className="relative z-10 flex w-full max-w-[900px] overflow-hidden rounded-[2rem] shadow-2xl transition-all duration-500 animate-[fadeIn_0.3s_ease-out] bg-white">
+      <div className="relative z-10 flex w-full h-[95vh] md:h-auto max-w-[900px] overflow-y-auto md:overflow-hidden rounded-t-[2rem] md:rounded-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-2xl transition-all duration-500 animate-[fadeInUp_0.3s_ease-out] bg-white">
         
         {/* Left Side - Form */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col relative bg-[#FDFDF8] text-slate-900">
+        <div className="w-full md:w-1/2 p-6 sm:p-8 md:p-12 flex flex-col relative bg-[#FDFDF8] text-slate-900 min-h-full">
             
             {/* Header Icon */}
-            <div className="absolute top-10 left-10 text-[#3498db]">
+            <div className="absolute top-6 left-6 md:top-10 md:left-10 text-[#3498db]">
                  <span className="material-symbols-outlined text-4xl">auto_awesome</span>
             </div>
 
-            <div className="mt-8 mb-6 text-center">
+            <div className="mt-12 md:mt-8 mb-6 text-center">
                 <h2 className="text-2xl font-black mb-2 text-[#101c22]">
                     {activeTab === 'login' ? 'Chào mừng trở lại!' : activeTab === 'register' ? 'Tham gia cộng đồng' : 'Khôi phục mật khẩu'}
                 </h2>
@@ -314,7 +314,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess
         {/* Close Button */}
         <button 
             onClick={onClose}
-            className="absolute top-4 right-4 z-20 p-2 rounded-full transition-colors bg-black/10 hover:bg-black/20 text-white md:text-white md:bg-white/20"
+            className="absolute top-4 right-4 z-20 p-2 rounded-full transition-colors bg-slate-100/80 hover:bg-slate-200 text-slate-600 md:text-white md:bg-black/10 md:hover:bg-black/20 backdrop-blur-sm"
         >
              <span className="material-symbols-outlined">close</span>
         </button>

@@ -41,9 +41,9 @@ const Hero: React.FC<HeroProps> = ({ onStart }) => {
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.6s', animationFillMode: 'forwards' }}>
                 <button 
                 onClick={onStart}
-                className="flex self-center lg:self-start min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#f1c40f] text-slate-900 text-base font-bold leading-normal tracking-[0.015em] hover:bg-amber-400 transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
+                className="flex self-center lg:self-start min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-auto min-h-[48px] py-3 px-6 bg-[#f1c40f] text-slate-900 text-sm md:text-base font-bold leading-normal tracking-[0.015em] hover:bg-amber-400 transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 text-center"
                 >
-                <span className="truncate">Bắt đầu hành trình học tập của bạn</span>
+                <span className="whitespace-normal">Bắt đầu hành trình học tập của bạn</span>
                 </button>
             </div>
           </div>
