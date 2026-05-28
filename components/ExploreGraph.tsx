@@ -1531,7 +1531,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
     return (
         <DroppableZone id="graph-zone" type="GRAPH" className="w-full h-full">
             <GraphShell>
-                 <header className={`absolute top-6 left-1/2 -translate-x-1/2 z-50 px-8 py-3 bg-[#023e8a]/40 backdrop-blur-xl border border-cyan-400/30 rounded-full flex justify-between items-center shadow-[0_0_30px_rgba(0,119,182,0.3)] transition-all duration-500 w-[90%] max-w-6xl pointer-events-auto ${zenMode ? '-translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
+                 <header className={`absolute top-6 left-1/2 -translate-x-1/2 z-50 px-4 md:px-8 py-2 md:py-3 bg-[#023e8a]/40 backdrop-blur-xl border border-cyan-400/30 rounded-full flex justify-between items-center shadow-[0_0_30px_rgba(0,119,182,0.3)] transition-all duration-500 w-[95%] md:w-[90%] max-w-6xl pointer-events-auto ${zenMode ? '-translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
                 
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2 select-none">
@@ -1649,7 +1649,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
             <LearningSideToolbar 
                 activeMode={interactionMode} 
                 onModeChange={setInteractionMode}
-                className="fixed left-6 top-1/2 -translate-y-1/2" 
+                className="fixed left-2 md:left-6 top-1/2 -translate-y-1/2 scale-90 md:scale-100 origin-left" 
             />
 
             {/* FLOATING ACTION BUTTONS */}
@@ -1657,7 +1657,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
             {!isDueSidebarOpen && (
                 <button 
                     onClick={() => setIsDueSidebarOpen(true)}
-                    className="fixed bottom-24 right-8 z-[60] bg-cyan-600 hover:bg-cyan-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(6,182,212,0.5)] flex items-center gap-2 group transition-all"
+                    className="fixed bottom-[5.5rem] md:bottom-24 right-2 md:right-8 z-[60] bg-cyan-600 hover:bg-cyan-500 text-white p-3 md:p-4 rounded-full shadow-[0_0_20px_rgba(6,182,212,0.5)] flex items-center gap-2 group transition-all"
                 >
                     <span className="material-symbols-outlined font-bold">inventory_2</span>
                     <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm">
@@ -1671,7 +1671,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
             {!isLearningHubOpen && (
                  <button 
                     onClick={() => setIsLearningHubOpen(true)}
-                    className="fixed bottom-24 left-8 z-[60] bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 text-white p-4 rounded-full flex items-center gap-2 group transition-all"
+                    className="fixed bottom-[5.5rem] md:bottom-24 left-2 md:left-8 z-[60] bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 text-white p-3 md:p-4 rounded-full flex items-center gap-2 group transition-all"
                 >
                     <span className="material-symbols-outlined font-bold text-cyan-400">psychology</span>
                     <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm">
@@ -1735,7 +1735,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
 
             <div className={`absolute inset-0 z-10 pointer-events-none transition-opacity duration-300 ${zenMode ? 'opacity-0' : 'opacity-100'}`}>
                 
-                <div className="absolute top-32 left-1/2 -translate-x-1/2 w-full max-w-lg pointer-events-auto z-40">
+                <div className="absolute top-24 md:top-32 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 md:px-0 pointer-events-auto z-40">
                      <SmartSearchBar 
                         isOpen={showSearch} setIsOpen={setShowSearch} 
                         query={searchQuery} setQuery={setSearchQuery} 
@@ -1773,7 +1773,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
 
                 <DraggableFeatureNav nodes={userNodes} onNodeClick={(node) => handleFocusNode(node.id)} />
 
-                <div className="absolute top-32 right-8 flex flex-col gap-4 items-end pointer-events-auto z-40">
+                <div className="absolute top-32 right-2 md:right-8 flex flex-col gap-4 items-end pointer-events-auto z-40 hidden sm:flex">
                     <DailyStreakFlame />
                     <GraphDashboardCard 
                         nodes={userNodes} 
@@ -1797,16 +1797,16 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
                     />
                 </div>
 
-                 <div className="absolute bottom-24 left-8 pointer-events-auto flex flex-col gap-2 z-50">
+                 <div className="absolute bottom-[5.5rem] md:bottom-24 left-16 md:left-24 pointer-events-auto flex flex-col gap-2 z-50">
                       <MacroRecorder />
                  </div>
 
-                <div className="absolute bottom-24 right-8 pointer-events-auto flex flex-col gap-2 bg-[#1e1e1e] p-2 rounded-xl border border-white/10 shadow-xl z-50">
-                    <button onClick={handleSaveLayout} className="p-2 hover:bg-white/10 rounded text-slate-300" title="Lưu vị trí hiện tại"><span className="material-symbols-outlined">save</span></button>
-                    <div className="h-px bg-white/10 w-full my-1"></div>
-                    <button onClick={handleZoomIn} className="p-2 hover:bg-white/10 rounded text-slate-300" title="Zoom In"><span className="material-symbols-outlined">add</span></button>
-                    <button onClick={handleZoomOut} className="p-2 hover:bg-white/10 rounded text-slate-300" title="Zoom Out"><span className="material-symbols-outlined">remove</span></button>
-                    <button onClick={handleFitView} className="p-2 hover:bg-white/10 rounded text-slate-300" title="Fit View"><span className="material-symbols-outlined">center_focus_strong</span></button>
+                <div className="absolute bottom-[5.5rem] md:bottom-24 right-16 md:right-24 pointer-events-auto flex gap-2 bg-[#1e1e1e]/80 backdrop-blur-md p-1 md:p-2 rounded-xl border border-white/10 shadow-xl z-50 flex-row">
+                    <button onClick={handleSaveLayout} className="p-1.5 md:p-2 hover:bg-white/10 rounded text-slate-300" title="Lưu vị trí hiện tại"><span className="material-symbols-outlined text-sm md:text-base">save</span></button>
+                    <div className="w-px h-6 bg-white/10 mx-1 self-center"></div>
+                    <button onClick={handleZoomIn} className="p-1.5 md:p-2 hover:bg-white/10 rounded text-slate-300" title="Zoom In"><span className="material-symbols-outlined text-sm md:text-base">add</span></button>
+                    <button onClick={handleZoomOut} className="p-1.5 md:p-2 hover:bg-white/10 rounded text-slate-300" title="Zoom Out"><span className="material-symbols-outlined text-sm md:text-base">remove</span></button>
+                    <button onClick={handleFitView} className="p-1.5 md:p-2 hover:bg-white/10 rounded text-slate-300" title="Fit View"><span className="material-symbols-outlined text-sm md:text-base">center_focus_strong</span></button>
                 </div>
 
                 {selectedNodesData.length > 0 && !isDraggingCanvas && !zoneToolActive && !contextMenuPos && (
@@ -1864,7 +1864,7 @@ const ExploreGraph: React.FC<ExploreGraphProps> = ({
 
                 {/* Link Customization Toolbar - High Z-Index to stay on top */}
                 {selectedEdge && (
-                    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[250] animate-slide-up">
+                    <div className="fixed bottom-[5.5rem] md:bottom-24 left-1/2 -translate-x-1/2 z-[250] animate-slide-up w-[95%] md:w-auto">
                         <EdgeToolbar 
                             edge={selectedEdge}
                             initialData={nodesRef.current.find(n => n.id === selectedEdge.fromId)?.connections?.find((c: any) => c.targetId === selectedEdge.toId)}
