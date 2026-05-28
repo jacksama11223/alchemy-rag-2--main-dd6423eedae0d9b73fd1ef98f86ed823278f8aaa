@@ -287,7 +287,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
   };
 
   return (
-    <div className="min-h-screen font-display text-slate-800 flex flex-col relative overflow-x-hidden">
+    <div className="min-h-screen font-display text-slate-800 flex flex-col relative overflow-x-hidden pb-16 md:pb-0">
       <OceanBackground variant="surface" />
       
       <style>{`
@@ -390,18 +390,21 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
 
           <button 
             onClick={onShowAccount}
-            className="flex gap-2 cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 pl-2 pr-4 bg-white/50 hover:bg-white/80 border border-white text-slate-700 text-sm font-bold shadow-sm transition-all hover:shadow-md"
+            className="flex gap-2 cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 w-10 sm:w-auto sm:pl-2 sm:pr-4 bg-white/50 hover:bg-white/80 border border-white text-slate-700 text-sm font-bold shadow-sm transition-all hover:shadow-md"
+            title="Hồ Sơ Cá Nhân"
           >
-            <div className="flex items-center justify-center bg-blue-100 aspect-square rounded-full size-8 text-blue-600">
+            <div className="flex items-center justify-center bg-blue-100 aspect-square rounded-full size-8 text-blue-600 sm:shrink-0">
                 <span className="material-symbols-outlined text-lg">person</span>
             </div>
-            <span className="truncate">Hồ Sơ Cá Nhân</span>
+            <span className="hidden sm:inline truncate">Hồ Sơ Cá Nhân</span>
           </button>
           <button 
             onClick={onLogout}
-            className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-4 bg-red-50 hover:bg-red-100 text-red-500 border border-red-200 text-sm font-bold transition-colors shadow-sm"
+            className="flex w-10 sm:w-auto sm:min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 sm:px-4 bg-red-50 hover:bg-red-100 text-red-500 border border-red-200 text-sm font-bold transition-colors shadow-sm"
+            title="Đăng Xuất Hệ Thống"
           >
-            <span className="truncate">Đăng Xuất Hệ Thống</span>
+            <span className="material-symbols-outlined text-lg sm:hidden">logout</span>
+            <span className="hidden sm:inline truncate">Đăng Xuất Hệ Thống</span>
           </button>
         </div>
       </header>
@@ -639,7 +642,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
               </button>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 relative">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 relative">
               <EcosystemGuideOverlay />
               <FeatureCard id="alchemy" icon="science" title="Tổng Hợp & Xử Lý Tri Thức" desc="Xử lý & Tổng hợp" bg="bg-purple-500" color="text-purple-600" onClick={() => handleFeatureClick('alchemy')} />
               <FeatureCard id="knowledge-graph" icon="hub" title="Trực Quan Hóa Mạng Lưới" desc="Trực quan hóa dữ liệu" bg="bg-blue-500" color="text-blue-600" onClick={() => handleFeatureClick('knowledge-graph')} />
@@ -693,7 +696,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
                   )}
               </button>
               
-              <button onClick={() => handleFeatureClick('achievements')} className={`col-span-2 md:col-span-2 bg-gradient-to-r from-orange-400 to-amber-500 rounded-3xl p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between group overflow-hidden relative ${isGuideEnabled && hoveredFeature ? 'opacity-30 grayscale' : 'z-50'}`}>
+              <button onClick={() => handleFeatureClick('achievements')} className={`col-span-1 sm:col-span-2 lg:col-span-2 bg-gradient-to-r from-orange-400 to-amber-500 rounded-3xl p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between group overflow-hidden relative ${isGuideEnabled && hoveredFeature ? 'opacity-30 grayscale' : 'z-50'}`}>
                   <div className="relative z-10 text-left">
                       <h3 className="text-xl font-black mb-1">Hồ Sơ Năng Lực Cá Nhân</h3>
                       <p className="text-orange-100 text-sm font-medium">Đánh giá quá trình phát triển năng lực</p>
@@ -704,7 +707,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
               </button>
 
-              <button onClick={() => handleFeatureClick('user-guide')} className={`col-span-2 md:col-span-2 bg-gradient-to-r from-slate-700 to-slate-800 rounded-3xl p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between group overflow-hidden relative ${isGuideEnabled && hoveredFeature ? 'opacity-30 grayscale' : 'z-50'}`}>
+              <button onClick={() => handleFeatureClick('user-guide')} className={`col-span-1 sm:col-span-2 lg:col-span-2 bg-gradient-to-r from-slate-700 to-slate-800 rounded-3xl p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between group overflow-hidden relative ${isGuideEnabled && hoveredFeature ? 'opacity-30 grayscale' : 'z-50'}`}>
                   <div className="relative z-10 text-left">
                       <h3 className="text-xl font-black mb-1">Tài Liệu Hướng Dẫn Hệ Thống</h3>
                       <p className="text-slate-300 text-sm font-medium">Cơ sở dữ liệu tham khảo vận hành</p>
