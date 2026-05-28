@@ -207,56 +207,73 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ currentView, onNavigate, c
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                            className="fixed bottom-16 left-0 right-0 bg-white dark:bg-[#15202b] rounded-t-3xl shadow-2xl z-40 md:hidden p-4 pb-6"
+                            className="fixed bottom-16 left-0 right-0 bg-white dark:bg-[#15202b] rounded-t-3xl shadow-2xl z-40 md:hidden p-4 pb-6 max-h-[75vh] overflow-y-auto custom-scrollbar"
                         >
                             {/* Handle bar */}
                             <div className="w-10 h-1 bg-slate-300 dark:bg-slate-600 rounded-full mx-auto mb-4" />
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-3">
-                                {TAB_CONFIG.find(t => t.tab === activeTab)?.label}
-                            </p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {NAV_CONFIG[activeTab].map((item) => {
-                                    const isActive = currentView === item.view;
-                                    return (
-                                        <button
-                                            key={item.id}
-                                            onClick={() => handleNavItem(item.view)}
-                                            className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                                                isActive
-                                                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold'
-                                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                            }`}
-                                        >
-                                            <span className={`material-symbols-outlined text-xl ${isActive ? 'text-blue-500' : 'text-slate-400'}`}>
-                                                {item.icon}
-                                            </span>
-                                            <span className="text-sm">{item.label}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                            
+                            {TAB_CONFIG.map(({ tab, label }) => (
+                                <div key={tab} className="mb-5">
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">
+                                        {label}
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {NAV_CONFIG[tab].map((item) => {
+                                            const isActive = currentView === item.view;
+                                            return (
+                                                <button
+                                                    key={item.id}
+                                                    onClick={() => handleNavItem(item.view)}
+                                                    className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                                                        isActive
+                                                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold'
+                                                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                                    }`}
+                                                >
+                                                    <span className={`material-symbols-outlined text-xl ${isActive ? 'text-blue-500' : 'text-slate-400'}`}>
+                                                        {item.icon}
+                                                    </span>
+                                                    <span className="text-sm">{item.label}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
                         </motion.div>
                     </>
                 )}
             </AnimatePresence>
 
             {/* ── MOBILE BOTTOM NAV BAR ─────────────────────────────────────── */}
-            <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white dark:bg-[#15202b] border-t border-slate-200 dark:border-slate-700 flex items-center justify-around z-50 md:hidden shadow-lg">
-                {TAB_CONFIG.map(({ tab, label, icon }) => {
-                    const isActive = activeTab === tab;
+            <nav className="fixed bottom-0 left-0 right-0 h-[4.5rem] bg-white dark:bg-[#15202b] border-t border-slate-200 dark:border-slate-700 flex items-center justify-around z-50 md:hidden shadow-[0_-5px_20px_rgba(0,0,0,0.05)] pb-safe">
+                {[
+                    { label: 'Tổng quan', icon: 'dashboard', view: 'dashboard' },
+                    { label: 'Sơ đồ', icon: 'hub', view: 'explore-graph' },
+                    { label: 'Trợ lý', icon: 'school', view: 'tutor' },
+                    { label: 'Giả kim', icon: 'science', view: 'alchemy' },
+                    { label: 'Menu', icon: 'menu', view: 'MORE' }
+                ].map((item) => {
+                    const isActive = currentView === item.view || (item.view === 'MORE' && isMobileDrawerOpen);
                     return (
                         <button
-                            key={tab}
-                            onClick={() => handleTabChange(tab)}
-                            className={`flex flex-col items-center justify-center gap-0.5 px-4 py-1 rounded-xl transition-all relative ${
-                                isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+                            key={item.label}
+                            onClick={() => {
+                                if (item.view === 'MORE') setIsMobileDrawerOpen(!isMobileDrawerOpen);
+                                else {
+                                    onNavigate(item.view);
+                                    setIsMobileDrawerOpen(false);
+                                }
+                            }}
+                            className={`flex flex-col items-center justify-center gap-1 w-16 h-full transition-all relative ${
+                                isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'
                             }`}
                         >
                             <span className={`material-symbols-outlined text-[24px] transition-transform ${isActive ? 'filled scale-110' : ''}`}>
-                                {icon}
+                                {item.icon}
                             </span>
                             <span className={`text-[10px] font-medium ${isActive ? 'font-bold' : ''}`}>
-                                {label}
+                                {item.label}
                             </span>
                         </button>
                     );
